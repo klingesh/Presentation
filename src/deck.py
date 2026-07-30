@@ -447,12 +447,6 @@ class Deck:
                                 on_dark=False, max_w=0.55,
                                 right_edge=right) + 0.34
 
-        tf = textbox(slide, ML, FOOTER_Y, CW * 0.52, 0.24)
-        rich(tf, [(f"Unit {self.unit_no}", {'bold': True, 'color': NAVY}),
-                  ("  ·  ", {'color': MUTED_LT}),
-                  (self.unit_title, {'color': MUTED})],
-             size=9, first=True)
-
         n = len(self.prs.slides._sldIdLst) - 1  # index of the slide being built
         credit = f"{self.PRESENTER}  ·  {self.REGISTER}"
         block_w = 2.9
@@ -506,12 +500,8 @@ class Deck:
             place_logo(s, self.logo, 0, 0.72, 1.0, on_dark=True, max_w=2.5,
                        right_edge=ML + CW - 0.1)
 
-        tf = textbox(s, ML + 0.24, 1.28, 7.9, 0.3)
-        para(tf, self.course.upper(), size=10.5, bold=True, color=TEAL,
-             spacing=2.2, first=True)
-
         # unit badge
-        b = rect(s, ML + 0.24, 1.78, 1.62, 0.42, fill=None, line=BLUE, lw=1.25,
+        b = rect(s, ML + 0.24, 1.72, 1.62, 0.42, fill=None, line=BLUE, lw=1.25,
                  shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.5)
         tfb = b.text_frame
         tfb.vertical_anchor = MSO_ANCHOR.MIDDLE
@@ -621,9 +611,6 @@ class Deck:
             tf = textbox(s, ML + 2.5, 2.72 + th + 0.24, 7.6, 0.9)
             para(tf, blurb, size=13.5, color=RGBColor(0xAF, 0xC1, 0xDE), line=1.34,
                  first=True)
-        tf = textbox(s, ML + 0.3, 6.5, 7.0, 0.3)
-        para(tf, f"UNIT {self.unit_no}  ·  {self.unit_title}".upper(), size=9,
-             bold=True, color=RGBColor(0x6B, 0x7F, 0xA6), spacing=1.6, first=True)
         if self.logo:
             place_logo(s, self.logo, 0, 0.72, 0.82, on_dark=True, max_w=2.1,
                        right_edge=ML + CW - 0.1)
@@ -1124,9 +1111,6 @@ class Deck:
         ghost(s, 9.8, -1.4, 5.4, 5.4, "3B7AF7", 9000)
         ghost(s, 11.4, 3.8, 3.6, 3.6, "00B3A4", 7000)
         rect(s, 0, 0, 0.16, SH, fill=TEAL)
-        tf = textbox(s, ML + 0.3, 2.36, 7.4, 0.3)
-        para(tf, f"UNIT {self.unit_no:02d}  ·  {self.unit_title}".upper(), size=10,
-             bold=True, color=TEAL, spacing=2.0, first=True)
         tf = textbox(s, ML + 0.3, 2.78, 8.0, 1.1)
         para(tf, title, size=46, bold=True, color=WHITE, line=1.04, first=True)
         rect(s, ML + 0.3, 4.02, 0.72, 0.05, fill=BLUE)
@@ -1159,10 +1143,7 @@ class Deck:
                                             'size': 10}),
                   (self.REGISTER, {'bold': True,
                                    'color': RGBColor(0xC5, 0xD2, 0xE8),
-                                   'size': 10}),
-                  ("   ·   ", {'color': RGBColor(0x4A, 0x5E, 0x86), 'size': 10}),
-                  (self.course, {'color': RGBColor(0x7E, 0x91, 0xB4),
-                                 'size': 10})],
+                                   'size': 10})],
              first=True)
         return s
 

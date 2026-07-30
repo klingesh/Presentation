@@ -14,7 +14,7 @@ def build(outdir="."):
         "How Gen AI changes competition in a digital world, how to build real "
         "business solutions with it, and how leaders turn ordinary teams into "
         "highly effective ones.",
-        ["Unit 5 of 5"],
+
         chips=["Digital World", "Business Solutions", "Leadership", "Maturity"])
     notes(s, "This is the closing unit. Shift the framing from 'what is AI' to "
              "'what do we do about it as managers'.")

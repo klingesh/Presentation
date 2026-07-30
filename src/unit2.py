@@ -14,7 +14,7 @@ def build(outdir="."):
         "The Gen AI tools people actually use at work, how to write "
         "instructions that get good results, and how to connect AI to a "
         "process without writing code.",
-        ["Unit 2 of 5"],
+
         chips=["Platforms & Tools", "Prompt Engineering", "APIs", "No-Code"])
     notes(s, "Unit 1 was the theory. This unit is the hands-on one. Tell the "
              "class the goal: by the end they should be able to pick the right "

@@ -13,7 +13,7 @@ def build(outdir="."):
         "AI Across the Business",
         "Where AI creates real value in marketing, finance, HR and operations - "
         "and what AI agents change about how work gets done.",
-        ["Unit 3 of 5"],
+
         chips=["Marketing", "Finance", "HR", "Operations", "AI Agents"])
     notes(s, "This is the unit that connects theory to the workplace. Keep asking "
              "the class: which of these happens in your company today?")
