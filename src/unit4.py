@@ -1,5 +1,6 @@
 """UNIT 4 — Ethics, legal and social implications."""
 
+import embed_fonts
 from deck import (Deck, notes, BLUE, TEAL, AMBER, VIOLET, GREEN, RED)
 
 OUT = "Unit 4 - Ethics, Legal and Social Implications.pptx"
@@ -325,6 +326,7 @@ def build(outdir="."):
 
     path = f"{outdir}/{OUT}"
     d.save(path)
+    embed_fonts.embed(path)      # travel with the theme fonts
     return path
 
 

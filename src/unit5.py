@@ -1,5 +1,6 @@
 """UNIT 5 — Strategy, innovation and Leadership."""
 
+import embed_fonts
 from deck import (Deck, notes, BLUE, TEAL, AMBER, VIOLET, GREEN, RED)
 
 OUT = "Unit 5 - Strategy, Innovation and Leadership.pptx"
@@ -308,6 +309,7 @@ def build(outdir="."):
 
     path = f"{outdir}/{OUT}"
     d.save(path)
+    embed_fonts.embed(path)      # travel with the theme fonts
     return path
 
 
