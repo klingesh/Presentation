@@ -500,37 +500,40 @@ class Deck:
             place_logo(s, self.logo, 0, 0.72, 1.0, on_dark=True, max_w=2.5,
                        right_edge=ML + CW - 0.1)
 
-        # unit badge
-        b = rect(s, ML + 0.24, 1.72, 1.62, 0.42, fill=None, line=BLUE, lw=1.25,
-                 shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.5)
-        tfb = b.text_frame
-        tfb.vertical_anchor = MSO_ANCHOR.MIDDLE
-        para(tfb, f"UNIT {self.unit_no:02d}", size=10.5, bold=True, color=WHITE,
-             align=PP_ALIGN.CENTER, spacing=1.6, first=True)
-
         tw = 8.1
         tsize = 44.0
         while tsize > 32 and fit(title, tsize, tw, bold=True) > 2:
             tsize -= 2.0
         thh = text_height_in(title, tsize, tw, True, 1.04)
-        tf = textbox(s, ML + 0.24, 2.52, tw, thh + 0.2)
+
+        # Vertical rhythm: the title/rule/subtitle/chips group is centred in the
+        # band between the logo and the presenter block, so short and long
+        # titles both sit comfortably.
+        sw = 7.4
+        ssize = autosize(subtitle, sw, 1.15, 15, False, 1.35, min_size=12)
+        subh = text_height_in(subtitle, ssize, sw, False, 1.35)
+        RULE_GAP, SUB_GAP, CHIP_GAP, CHIP_H = 0.22, 0.34, 0.44, 0.36
+        band_top, band_bottom = 2.10, 5.98
+        group = thh + RULE_GAP + SUB_GAP + subh + (CHIP_GAP + CHIP_H if chips else 0)
+        ty = band_top + max(0.0, (band_bottom - band_top - group) / 2)
+
+        tf = textbox(s, ML + 0.24, ty, tw, thh + 0.2)
         para(tf, title, size=tsize, bold=True, color=WHITE, line=1.04, first=True)
 
-        y = 2.52 + thh + 0.22
+        y = ty + thh + RULE_GAP
         rect(s, ML + 0.24, y, 0.72, 0.05, fill=TEAL)
-        sw = 7.4
-        ssize = autosize(subtitle, sw, 1.0, 15, False, 1.35, min_size=12)
-        tf = textbox(s, ML + 0.24, y + 0.34, sw, 1.05)
+        tf = textbox(s, ML + 0.24, y + SUB_GAP, sw, subh + 0.14)
         para(tf, subtitle, size=ssize, color=RGBColor(0xC5, 0xD2, 0xE8), line=1.35,
              first=True)
 
-        sub_bottom = y + 0.34 + text_height_in(subtitle, ssize, sw, False, 1.35)
+        sub_bottom = y + SUB_GAP + subh
         if chips:
             cx = ML + 0.24
-            chip_y = min(max(5.34, sub_bottom + 0.34), 5.46)
+            chip_y = sub_bottom + CHIP_GAP
             for i, c in enumerate(chips):
                 w = chip_width(c, 9.5, True, 0.0, 0.42)
-                ch = rect(s, cx, chip_y, w, 0.36, fill=None, line=NAVY_SOFT, lw=1.0,
+                ch = rect(s, cx, chip_y, w, CHIP_H, fill=None, line=NAVY_SOFT,
+                          lw=1.0,
                           shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.5)
                 ch.line.color.rgb = RGBColor(0x33, 0x4B, 0x78)
                 t = ch.text_frame
