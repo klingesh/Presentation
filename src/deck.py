@@ -101,6 +101,72 @@ def card(slide, x, y, w, h, fill=WHITE, line=BORDER, radius=0.06, shadow=True):
                 shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=radius, shadow=shadow)
 
 
+EXTS = ("png", "PNG", "jpg", "JPG", "jpeg", "JPEG", "webp", "gif")
+
+
+def _assets_dir(assets_dir=None):
+    import os
+    if assets_dir:
+        return assets_dir
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
+
+
+def find_logo(prefer="logo-full", assets_dir=None, fallback=True):
+    """Locate the college logo in assets/.
+
+    Looks for `prefer` (e.g. logo-full / logo-mark) first, then falls back to
+    any image in the folder, so simply dropping one file in still works.
+    """
+    import glob
+    import os
+    d = _assets_dir(assets_dir)
+    for ext in EXTS:
+        hit = os.path.join(d, f"{prefer}.{ext}")
+        if os.path.exists(hit):
+            return hit
+    if not fallback:
+        return None
+    for ext in EXTS:
+        hits = sorted(g for g in glob.glob(os.path.join(d, f"*.{ext}"))
+                      if "source" not in os.path.basename(g).lower())
+        if hits:
+            return hits[0]
+    return None
+
+
+def logo_size(path, h, max_w=3.0):
+    """Width and height the logo will occupy at target height `h`."""
+    if not path:
+        return 0.0, 0.0
+    try:
+        from PIL import Image
+        pw, ph = Image.open(path).size
+        w = h * (pw / float(ph))
+    except Exception:
+        w = h
+    if w > max_w:                      # very wide logo → constrain by width
+        h = h * (max_w / w)
+        w = max_w
+    return w, h
+
+
+def place_logo(slide, path, x, y, h, on_dark=False, pad=0.13, max_w=3.0,
+               right_edge=None):
+    """Drop the logo at a given height; on dark slides sit it on a white chip."""
+    if not path:
+        return 0.0
+    w, h = logo_size(path, h, max_w)
+    if right_edge is not None:
+        x = right_edge - w
+    if on_dark:
+        plate = rect(slide, x - pad, y - pad, w + pad * 2, h + pad * 2, fill=WHITE,
+                     line=None, shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.14)
+        plate.name = "logo-plate"
+    pic = slide.shapes.add_picture(path, _i(x), _i(y), height=_i(h))
+    pic.name = "college-logo"
+    return w
+
+
 def chip_width(text, size=9.5, bold=True, spacing=1.4, pad=0.36):
     """Pill width that actually fits its label, including letter-spacing."""
     return (text_width_in(text, size, bold)
@@ -337,8 +403,12 @@ def autosize(text, width_in, height_in, size, bold=False, line=1.25,
 # Deck
 # ==========================================================================
 class Deck:
+    # presenter details, shared by every deck
+    PRESENTER = "Lingesh K"
+    REGISTER = "OSI2509030"
+
     def __init__(self, unit_no, unit_title, course="PGPM · Systems Specialisation",
-                 subject="Artificial Intelligence & Generative AI"):
+                 subject="Artificial Intelligence & Generative AI", logo=None):
         self.prs = Presentation()
         self.prs.slide_width = Inches(SW)
         self.prs.slide_height = Inches(SH)
@@ -346,8 +416,18 @@ class Deck:
         self.unit_title = unit_title
         self.course = course
         self.subject = subject
+        self.logo = logo if logo is not None else find_logo("logo-full")
+        # compact crest-only mark for the footer, where the wordmark would be
+        # too small to read; falls back to the full logo if not supplied
+        self.mark = find_logo("logo-mark", fallback=False) or self.logo
         self.blank = self.prs.slide_layouts[6]
         self._sections = []
+
+        core = self.prs.core_properties
+        core.title = f"Unit {unit_no} — {unit_title}"
+        core.author = f"{self.PRESENTER} ({self.REGISTER})"
+        core.subject = subject
+        core.comments = f"{course} · Unit {unit_no} of 5"
 
     # ---------------- infrastructure ----------------
     def _new(self, footer=True, bg=None):
@@ -360,15 +440,22 @@ class Deck:
 
     def _footer(self, slide):
         hline(slide, ML, FOOTER_Y - 0.16, CW, BORDER, 0.75)
-        tf = textbox(slide, ML, FOOTER_Y, CW * 0.75, 0.24)
-        rich(tf, [(f"Unit {self.unit_no}", {'bold': True, 'color': NAVY}),
-                  ("  ·  ", {'color': MUTED_LT}),
-                  (self.unit_title, {'color': MUTED})],
-             size=9, first=True)
+        right = ML + CW
+        logo_w = 0.0
+        if self.mark:
+            logo_w = place_logo(slide, self.mark, 0, FOOTER_Y - 0.08, 0.34,
+                                on_dark=False, max_w=0.55,
+                                right_edge=right) + 0.34
+
         n = len(self.prs.slides._sldIdLst) - 1  # index of the slide being built
-        tf2 = textbox(slide, ML + CW - 1.2, FOOTER_Y, 1.2, 0.24)
-        para(tf2, f"{n + 1:02d}", size=9, bold=True, color=MUTED,
-             align=PP_ALIGN.RIGHT, first=True)
+        credit = f"{self.PRESENTER}  ·  {self.REGISTER}"
+        block_w = 2.9
+        x = right - logo_w - block_w
+        tf2 = textbox(slide, x, FOOTER_Y, block_w, 0.24)
+        rich(tf2, [(credit, {'color': MUTED}),
+                   ("     ", {}),
+                   (f"{n + 1:02d}", {'bold': True, 'color': NAVY})],
+             size=9, align=PP_ALIGN.RIGHT, first=True)
 
     def _head(self, slide, kicker, title, sub=None, accent=BLUE):
         """Standard slide header: small label, big title, accent rule."""
@@ -409,41 +496,44 @@ class Deck:
         ghost(s, 8.0, 1.1, 3.0, 3.0, "FFFFFF", 3500)
         rect(s, 0, 0, 0.16, SH, fill=BLUE)
 
-        tf = textbox(s, ML + 0.24, 1.28, 7.9, 0.3)
-        para(tf, self.course.upper(), size=10.5, bold=True, color=TEAL,
-             spacing=2.2, first=True)
-
-        # unit badge
-        b = rect(s, ML + 0.24, 1.78, 1.62, 0.42, fill=None, line=BLUE, lw=1.25,
-                 shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.5)
-        tfb = b.text_frame
-        tfb.vertical_anchor = MSO_ANCHOR.MIDDLE
-        para(tfb, f"UNIT {self.unit_no:02d}", size=10.5, bold=True, color=WHITE,
-             align=PP_ALIGN.CENTER, spacing=1.6, first=True)
+        if self.logo:
+            place_logo(s, self.logo, 0, 0.72, 1.0, on_dark=True, max_w=2.5,
+                       right_edge=ML + CW - 0.1)
 
         tw = 8.1
         tsize = 44.0
         while tsize > 32 and fit(title, tsize, tw, bold=True) > 2:
             tsize -= 2.0
         thh = text_height_in(title, tsize, tw, True, 1.04)
-        tf = textbox(s, ML + 0.24, 2.52, tw, thh + 0.2)
+
+        # Vertical rhythm: the title/rule/subtitle/chips group is centred in the
+        # band between the logo and the presenter block, so short and long
+        # titles both sit comfortably.
+        sw = 7.4
+        ssize = autosize(subtitle, sw, 1.15, 15, False, 1.35, min_size=12)
+        subh = text_height_in(subtitle, ssize, sw, False, 1.35)
+        RULE_GAP, SUB_GAP, CHIP_GAP, CHIP_H = 0.22, 0.34, 0.44, 0.36
+        band_top, band_bottom = 2.10, 5.98
+        group = thh + RULE_GAP + SUB_GAP + subh + (CHIP_GAP + CHIP_H if chips else 0)
+        ty = band_top + max(0.0, (band_bottom - band_top - group) / 2)
+
+        tf = textbox(s, ML + 0.24, ty, tw, thh + 0.2)
         para(tf, title, size=tsize, bold=True, color=WHITE, line=1.04, first=True)
 
-        y = 2.52 + thh + 0.22
+        y = ty + thh + RULE_GAP
         rect(s, ML + 0.24, y, 0.72, 0.05, fill=TEAL)
-        sw = 7.4
-        ssize = autosize(subtitle, sw, 1.0, 15, False, 1.35, min_size=12)
-        tf = textbox(s, ML + 0.24, y + 0.34, sw, 1.05)
+        tf = textbox(s, ML + 0.24, y + SUB_GAP, sw, subh + 0.14)
         para(tf, subtitle, size=ssize, color=RGBColor(0xC5, 0xD2, 0xE8), line=1.35,
              first=True)
 
-        sub_bottom = y + 0.34 + text_height_in(subtitle, ssize, sw, False, 1.35)
+        sub_bottom = y + SUB_GAP + subh
         if chips:
             cx = ML + 0.24
-            chip_y = max(5.42, sub_bottom + 0.36)
+            chip_y = sub_bottom + CHIP_GAP
             for i, c in enumerate(chips):
                 w = chip_width(c, 9.5, True, 0.0, 0.42)
-                ch = rect(s, cx, chip_y, w, 0.36, fill=None, line=NAVY_SOFT, lw=1.0,
+                ch = rect(s, cx, chip_y, w, CHIP_H, fill=None, line=NAVY_SOFT,
+                          lw=1.0,
                           shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.5)
                 ch.line.color.rgb = RGBColor(0x33, 0x4B, 0x78)
                 t = ch.text_frame
@@ -452,13 +542,25 @@ class Deck:
                      align=PP_ALIGN.CENTER, first=True)
                 cx += w + 0.14
 
+        # presenter block, always shown
+        hline(s, ML + 0.24, 6.14, 4.2, RGBColor(0x2A, 0x3E, 0x66), 1.0)
+        tf = textbox(s, ML + 0.24, 6.34, 5.4, 0.7)
+        para(tf, "PRESENTED BY", size=8.5, bold=True, color=TEAL, spacing=1.6,
+             first=True)
+        rich(tf, [(self.PRESENTER, {'bold': True, 'color': WHITE, 'size': 13}),
+                  ("      Register No. ", {'color': RGBColor(0x7E, 0x91, 0xB4),
+                                           'size': 10.5}),
+                  (self.REGISTER, {'bold': True,
+                                   'color': RGBColor(0xC5, 0xD2, 0xE8),
+                                   'size': 10.5})],
+             space_before=4)
         if meta_lines:
-            hline(s, ML + 0.24, 6.28, 4.2, RGBColor(0x2A, 0x3E, 0x66), 1.0)
-            tf = textbox(s, ML + 0.24, 6.48, 6.0, 0.7)
+            tf2 = textbox(s, ML + CW - 4.7, 6.42, 4.6, 0.7)
             for i, m in enumerate(meta_lines):
-                para(tf, m, size=10.5, bold=(i == 0),
-                     color=WHITE if i == 0 else RGBColor(0x8B, 0x9D, 0xBE),
-                     line=1.3, first=(i == 0))
+                para(tf2, m, size=10, bold=(i == 0),
+                     color=RGBColor(0xC5, 0xD2, 0xE8) if i == 0
+                     else RGBColor(0x7E, 0x91, 0xB4),
+                     line=1.34, align=PP_ALIGN.RIGHT, first=(i == 0))
         return s
 
     def agenda_slide(self, items, title="What we will cover",
@@ -512,9 +614,9 @@ class Deck:
             tf = textbox(s, ML + 2.5, 2.72 + th + 0.24, 7.6, 0.9)
             para(tf, blurb, size=13.5, color=RGBColor(0xAF, 0xC1, 0xDE), line=1.34,
                  first=True)
-        tf = textbox(s, ML + 0.3, 6.5, 6.0, 0.3)
-        para(tf, f"UNIT {self.unit_no}  ·  {self.unit_title}".upper(), size=9,
-             bold=True, color=RGBColor(0x6B, 0x7F, 0xA6), spacing=1.6, first=True)
+        if self.logo:
+            place_logo(s, self.logo, 0, 0.72, 0.82, on_dark=True, max_w=2.1,
+                       right_edge=ML + CW - 0.1)
         return s
 
     def bullets_slide(self, kicker, title, bullets, sub=None, lead=None,
@@ -946,6 +1048,9 @@ class Deck:
         gradient_bg(s, NAVY, NAVY_DEEP, 315.0)
         ghost(s, -1.4, 4.0, 5.0, 5.0, "3B7AF7", 8000)
         ghost(s, 10.6, -1.2, 5.0, 5.0, "00B3A4", 6000)
+        if self.logo:
+            place_logo(s, self.logo, 0, 0.68, 0.7, on_dark=True, max_w=1.9,
+                       right_edge=ML + CW - 0.1)
         if kicker:
             tf = textbox(s, ML + 0.4, 1.9, CW - 0.8, 0.3)
             para(tf, kicker.upper(), size=10, bold=True, color=accent, spacing=2.0,
@@ -1009,9 +1114,6 @@ class Deck:
         ghost(s, 9.8, -1.4, 5.4, 5.4, "3B7AF7", 9000)
         ghost(s, 11.4, 3.8, 3.6, 3.6, "00B3A4", 7000)
         rect(s, 0, 0, 0.16, SH, fill=TEAL)
-        tf = textbox(s, ML + 0.3, 2.36, 7.4, 0.3)
-        para(tf, f"UNIT {self.unit_no:02d}  ·  {self.unit_title}".upper(), size=10,
-             bold=True, color=TEAL, spacing=2.0, first=True)
         tf = textbox(s, ML + 0.3, 2.78, 8.0, 1.1)
         para(tf, title, size=46, bold=True, color=WHITE, line=1.04, first=True)
         rect(s, ML + 0.3, 4.02, 0.72, 0.05, fill=BLUE)
@@ -1021,17 +1123,31 @@ class Deck:
                  first=True)
         if questions:
             qw = 8.0
-            tf = textbox(s, ML + 0.3, 5.34, qw, 1.72)
+            qbox = 1.32
+            tf = textbox(s, ML + 0.3, 5.16, qw, qbox)
             para(tf, "Questions to think about", size=10, bold=True, color=TEAL,
                  spacing=1.4, caps=True, first=True)
             qs = 11.5
-            while qs > 9.5 and sum(
-                    text_height_in("— " + q, qs, qw, False, 1.32) + 0.07
-                    for q in questions) > 1.72 - 0.24:
+            while qs > 9.0 and sum(
+                    text_height_in("— " + q, qs, qw, False, 1.28) + 0.07
+                    for q in questions) > qbox - 0.26:
                 qs -= 0.5
             for q in questions:
                 para(tf, "— " + q, size=qs, color=RGBColor(0x93, 0xA6, 0xC6),
-                     line=1.32, space_before=5)
+                     line=1.28, space_before=4)
+        if self.logo:
+            place_logo(s, self.logo, 0, 0.72, 0.95, on_dark=True, max_w=2.4,
+                       right_edge=ML + CW - 0.1)
+        # presenter sign-off
+        hline(s, ML + 0.3, 6.6, 3.6, RGBColor(0x2A, 0x3E, 0x66), 1.0)
+        tf = textbox(s, ML + 0.3, 6.74, 6.4, 0.32)
+        rich(tf, [(self.PRESENTER, {'bold': True, 'color': WHITE, 'size': 11.5}),
+                  ("   ·   Register No. ", {'color': RGBColor(0x7E, 0x91, 0xB4),
+                                            'size': 10}),
+                  (self.REGISTER, {'bold': True,
+                                   'color': RGBColor(0xC5, 0xD2, 0xE8),
+                                   'size': 10})],
+             first=True)
         return s
 
 

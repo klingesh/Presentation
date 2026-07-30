@@ -14,7 +14,7 @@ def build(outdir="."):
         "The Gen AI tools people actually use at work, how to write "
         "instructions that get good results, and how to connect AI to a "
         "process without writing code.",
-        ["PGPM · Systems Specialisation", "Unit 2 of 5"],
+
         chips=["Platforms & Tools", "Prompt Engineering", "APIs", "No-Code"])
     notes(s, "Unit 1 was the theory. This unit is the hands-on one. Tell the "
              "class the goal: by the end they should be able to pick the right "
@@ -23,7 +23,7 @@ def build(outdir="."):
     # ---------------------------------------------------------------- 02
     d.agenda_slide([
         ("The tool landscape", "How to sort dozens of tools into a simple map"),
-        ("Six tools up close", "Numerous AI, Jasper, Midjourney, VEO, ODOU, Canva AI"),
+        ("Six tools up close", "Numerous AI, Jasper, Midjourney, VEO, Odoo, Canva AI"),
         ("Choosing a tool", "Four questions before you buy anything"),
         ("Prompt engineering", "What it is and why the same tool gives some "
                                "people better results"),
@@ -40,19 +40,24 @@ def build(outdir="."):
 
     # ---------------------------------------------------------------- 04
     s = d.cards_slide(
-        "The map", "Sort every Gen AI tool by what it produces",
+        "The map", "Sort AI tools by the job they do",
         [("Text and writing", "Emails, blogs, reports, summaries.\nChatGPT, Claude, "
                               "Jasper, Copilot."),
          ("Images and design", "Posters, mockups, social posts.\nMidjourney, "
                                "Canva AI, Firefly."),
          ("Video", "Clips, ads, explainers, edits.\nVEO, Runway, Synthesia."),
-         ("Audio and voice", "Voiceovers, music, dubbing.\nElevenLabs, Suno, ODOU."),
+         ("Audio and voice", "Voiceovers, music, dubbing.\nElevenLabs, Suno, "
+                             "Descript."),
          ("Data and spreadsheets", "Clean, classify, analyse rows.\nNumerous AI, "
                                    "Copilot in Excel."),
-         ("Code and automation", "Write code, connect systems.\nGitHub Copilot, "
-                                 "Cursor, Zapier.")],
-        sub="Start from the output you want. The tool choice follows from that.",
+         ("Business systems", "Run operations with AI built in.\nOdoo, Salesforce, "
+                              "SAP.")],
+        sub="Five of these create content. The last one runs the business - and "
+            "that difference matters.",
         cols=3, accent=BLUE, tinted=True)
+    notes(s, "Point out the last card deliberately. The first five are tools you "
+             "open to make something. A business system like Odoo is where the "
+             "work is actually recorded and run - AI sits inside it.")
 
     # ---------------------------------------------------------------- 05
     s = d.cards_slide(
@@ -72,24 +77,50 @@ def build(outdir="."):
 
     # ---------------------------------------------------------------- 06
     s = d.cards_slide(
-        "Tools up close — part 2", "Video, audio and everyday design",
+        "Tools up close — part 2", "Video, business systems and everyday design",
         [("VEO", "Google's video generation model. Describe a scene and it "
                  "produces short video with motion, camera movement and matching "
                  "sound.\n\nBest for: quick concept videos and social clips."),
-         ("ODOU", "Audio generation. Turn a written brief into a voiceover, "
-                  "jingle or background track, in many languages and "
-                  "voices.\n\nBest for: narration and sound without a studio."),
+         ("Odoo", "An open-source ERP that runs finance, sales, HR, inventory and "
+                  "projects in one place - now with AI features built into those "
+                  "modules.\n\nBest for: running the business, not making "
+                  "content."),
          ("Canva AI", "AI built into a design tool everyone can already use. "
                       "Generates layouts, rewrites text, removes backgrounds and "
                       "resizes for every channel.\n\nBest for: non-designers who "
                       "need presentable output fast.")],
         cols=3, accent=VIOLET)
-    notes(s, "Note for the presenter: the syllabus lists 'ODOU'. Confirm the "
-             "exact product name with the faculty - the category is AI audio and "
-             "voice generation, where Udio, Suno and ElevenLabs are the "
-             "best-known names.")
+    notes(s, "Odoo is the odd one out and worth flagging to the class. The other "
+             "five are content tools. Odoo is the system of record - the AI is "
+             "embedded in the workflow rather than being the product itself. The "
+             "next slide covers it properly.")
 
     # ---------------------------------------------------------------- 07
+    s = d.split_slide(
+        "Odoo in detail", "What is Odoo?",
+        "An open-source ERP platform that manages business operations - finance, "
+        "HR, sales, inventory, CRM and projects - from one system, with AI "
+        "features built in.",
+        ["ERP means Enterprise Resource Planning",
+         "One shared system instead of separate tools per team",
+         "Modules: accounting, sales and CRM, HR, inventory",
+         "Also manufacturing, projects, e-commerce and point of sale",
+         "You install only the modules you need",
+         "Used by startups, SMEs and large enterprises alike"],
+        [("Why it is in this syllabus", "Recent versions add AI: generated emails "
+                                        "and documents, chat assistants and "
+                                        "automatic document classification."),
+         ("AI inside the workflow", "AI-powered reports and business insights, "
+                                    "plus workflow automation and AI agents."),
+         ("The wider lesson", "This is where AI is heading - not a separate tool "
+                              "you visit, but a feature inside the system you "
+                              "already use.")],
+        accent=VIOLET)
+    notes(s, "If asked for a one-line answer: Odoo is an AI-enabled open-source "
+             "ERP used to manage finance, HR, sales, inventory, CRM and projects "
+             "from a single platform. Modular - install only what you need.")
+
+    # ---------------------------------------------------------------- 08
     s = d.table_slide(
         "Quick reference", "One table, six tools",
         ["Tool", "What it makes", "Use it for", "Watch out for"],
@@ -102,12 +133,14 @@ def build(outdir="."):
           "Rights and usage for commercial work"],
          ["VEO", "Short video", "Ideas, pitches, social clips",
           "Small errors in faces and text"],
-         ["ODOU", "Voice and music", "Narration, jingles, dubbing",
-          "Consent before cloning any voice"],
+         ["Odoo", "Business records and workflows", "Running finance, HR, sales "
+                                                    "and inventory with AI help",
+          "Setup effort and clean data"],
          ["Canva AI", "Ready-made designs", "Fast, presentable everyday design",
           "Everything can start to look alike"]],
-        widths=[1.25, 1.35, 2.2, 2.0], accent=BLUE,
-        note="No tool does everything well. Most teams end up using three or four.")
+        widths=[1.25, 1.5, 2.2, 1.9], accent=BLUE,
+        note="Five of these help you produce something. Odoo is where the business "
+             "actually runs.")
 
     # ---------------------------------------------------------------- 08
     s = d.process_slide(
@@ -322,7 +355,7 @@ def build(outdir="."):
          "Text, image, video, audio, data or code. Start there."),
         ("Six tools, six different jobs",
          "Numerous AI for data, Jasper for copy, Midjourney for images, VEO for "
-         "video, ODOU for audio, Canva AI for design."),
+         "video, Odoo for business operations, Canva AI for design."),
         ("Prompting is briefing, not coding",
          "Role, task, context, format, constraints."),
         ("Refine one thing at a time, then save the prompt",

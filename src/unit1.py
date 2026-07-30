@@ -13,7 +13,7 @@ def build(outdir="."):
         "Introduction to AI and Generative AI",
         "What artificial intelligence really is, the different types, how it "
         "learns, and where generative AI fits in.",
-        ["PGPM · Systems Specialisation", "Unit 1 of 5"],
+
         chips=["What is AI", "Types & Models", "Gen AI vs Predictive AI",
                "Risks & Benefits"])
     notes(s, "Open with a simple hook: everyone in this room used AI today - "

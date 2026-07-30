@@ -13,7 +13,7 @@ def build(outdir="."):
         "Ethics, Privacy and Regulation",
         "The rules, risks and responsibilities that come with using AI - and how "
         "to keep a human properly in charge of decisions.",
-        ["PGPM · Systems Specialisation", "Unit 4 of 5"],
+
         chips=["Privacy", "Security", "Regulation", "Decision Making"])
     notes(s, "Frame this positively: these are not obstacles. They are what make "
              "AI safe enough to actually deploy at scale.")
