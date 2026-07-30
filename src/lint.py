@@ -17,6 +17,7 @@ def lint(path, tol=0.06):
     sw = prs.slide_width / EMU
     sh = prs.slide_height / EMU
     issues = []
+    logos = {}
     for idx, slide in enumerate(prs.slides, start=1):
         for shp in slide.shapes:
             try:
@@ -29,6 +30,8 @@ def lint(path, tol=0.06):
                              or x + w > sw + 0.02 or y + h > sh + 0.02):
                 issues.append((idx, "off-slide", f"{shp.shape_type} "
                                                  f"@({x:.2f},{y:.2f}) {w:.2f}x{h:.2f}"))
+            if (shp.name or "") == "college-logo":
+                logos[idx] = logos.get(idx, 0) + 1
             if not shp.has_text_frame:
                 continue
             tf = shp.text_frame
@@ -66,6 +69,9 @@ def lint(path, tol=0.06):
                 issues.append((idx, "overflow",
                                f"needs {total:.2f}in, box {ih:.2f}in :: "
                                f"{txt[:58]!r}"))
+    for idx, count in sorted(logos.items()):
+        if count > 1:
+            issues.append((idx, "dup-logo", f"{count} logo images on one slide"))
     return issues, len(prs.slides._sldIdLst)
 
 
