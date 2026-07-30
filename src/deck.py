@@ -101,15 +101,34 @@ def card(slide, x, y, w, h, fill=WHITE, line=BORDER, radius=0.06, shadow=True):
                 shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=radius, shadow=shadow)
 
 
-def find_logo(assets_dir=None):
-    """First image found in assets/ - the college logo. None if not supplied."""
+EXTS = ("png", "PNG", "jpg", "JPG", "jpeg", "JPEG", "webp", "gif")
+
+
+def _assets_dir(assets_dir=None):
+    import os
+    if assets_dir:
+        return assets_dir
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
+
+
+def find_logo(prefer="logo-full", assets_dir=None, fallback=True):
+    """Locate the college logo in assets/.
+
+    Looks for `prefer` (e.g. logo-full / logo-mark) first, then falls back to
+    any image in the folder, so simply dropping one file in still works.
+    """
     import glob
     import os
-    if assets_dir is None:
-        assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                  "..", "assets")
-    for ext in ("png", "PNG", "jpg", "JPG", "jpeg", "JPEG", "webp", "gif"):
-        hits = sorted(glob.glob(os.path.join(assets_dir, f"*.{ext}")))
+    d = _assets_dir(assets_dir)
+    for ext in EXTS:
+        hit = os.path.join(d, f"{prefer}.{ext}")
+        if os.path.exists(hit):
+            return hit
+    if not fallback:
+        return None
+    for ext in EXTS:
+        hits = sorted(g for g in glob.glob(os.path.join(d, f"*.{ext}"))
+                      if "source" not in os.path.basename(g).lower())
         if hits:
             return hits[0]
     return None
@@ -397,7 +416,10 @@ class Deck:
         self.unit_title = unit_title
         self.course = course
         self.subject = subject
-        self.logo = logo if logo is not None else find_logo()
+        self.logo = logo if logo is not None else find_logo("logo-full")
+        # compact crest-only mark for the footer, where the wordmark would be
+        # too small to read; falls back to the full logo if not supplied
+        self.mark = find_logo("logo-mark", fallback=False) or self.logo
         self.blank = self.prs.slide_layouts[6]
         self._sections = []
 
@@ -420,10 +442,10 @@ class Deck:
         hline(slide, ML, FOOTER_Y - 0.16, CW, BORDER, 0.75)
         right = ML + CW
         logo_w = 0.0
-        if self.logo:
-            logo_w = place_logo(slide, self.logo, 0, FOOTER_Y - 0.06, 0.32,
-                                on_dark=False, max_w=0.9,
-                                right_edge=right) + 0.26
+        if self.mark:
+            logo_w = place_logo(slide, self.mark, 0, FOOTER_Y - 0.08, 0.34,
+                                on_dark=False, max_w=0.55,
+                                right_edge=right) + 0.34
 
         tf = textbox(slide, ML, FOOTER_Y, CW * 0.52, 0.24)
         rich(tf, [(f"Unit {self.unit_no}", {'bold': True, 'color': NAVY}),
