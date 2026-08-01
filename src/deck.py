@@ -18,59 +18,190 @@ from pptx.oxml.ns import qn
 from pptx.oxml import parse_xml
 
 # --------------------------------------------------------------------------
-# Palette — crimson primary, charcoal secondary, warm greys
+# Palettes
+#
+# Two themes ship with the system. Every colour lives in a named token, so a
+# deck can switch theme with set_palette() before it is built. CRIMSON is the
+# primary accent, CHARCOAL the secondary and STEEL the tertiary — the names are
+# historical; what they resolve to depends on the active palette.
 # --------------------------------------------------------------------------
-CRIMSON      = RGBColor(0x8B, 0x00, 0x00)
-CRIMSON_DK   = RGBColor(0x63, 0x00, 0x00)
-CRIMSON_MID  = RGBColor(0xA8, 0x2B, 0x2B)
-CRIMSON_TINT = RGBColor(0xF8, 0xEE, 0xEE)
+def _c(v):
+    return RGBColor((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
 
-CHARCOAL     = RGBColor(0x1F, 0x29, 0x37)
-CHARCOAL_DK  = RGBColor(0x0F, 0x17, 0x22)
-CHARCOAL_TINT = RGBColor(0xEE, 0xF0, 0xF3)
 
-STEEL        = RGBColor(0x4B, 0x55, 0x63)
-STEEL_TINT   = RGBColor(0xF1, 0xF2, 0xF4)
-
-WHITE        = RGBColor(0xFF, 0xFF, 0xFF)
-PANEL        = RGBColor(0xF9, 0xFA, 0xFB)
-BORDER       = RGBColor(0xE5, 0xE7, 0xEB)
-INK          = RGBColor(0x1F, 0x29, 0x37)
-MUTED        = RGBColor(0x6B, 0x72, 0x80)
-MUTED_LT     = RGBColor(0x9C, 0xA3, 0xAF)
-
-# text on dark backgrounds
-ON_DARK      = RGBColor(0xC7, 0xCE, 0xD8)
-ON_CRIMSON   = RGBColor(0xF2, 0xD9, 0xD9)
-ON_CRIMSON_LT = RGBColor(0xE3, 0xB4, 0xB4)
-
-# Legacy names kept so the unit content files need no changes. The rainbow
-# palette collapses onto the report's restrained crimson / charcoal / steel.
-NAVY = INK
-BLUE = CRIMSON
-RED = CRIMSON
-AMBER = CRIMSON
-TEAL = CHARCOAL
-GREEN = CHARCOAL
-VIOLET = STEEL
-BLUE_LIGHT = CRIMSON_TINT
-TEAL_LIGHT = CHARCOAL_TINT
-AMBER_LIGHT = CRIMSON_TINT
-GREEN_LIGHT = CHARCOAL_TINT
-VIOLET_LIGHT = STEEL_TINT
-RED_LIGHT = CRIMSON_TINT
-NAVY_SOFT = STEEL
-
-ACCENTS = [CRIMSON, CHARCOAL, STEEL, CRIMSON, CHARCOAL, STEEL]
-ACCENT_TINTS = {
-    str(CRIMSON): CRIMSON_TINT,
-    str(CHARCOAL): CHARCOAL_TINT,
-    str(STEEL): STEEL_TINT,
+PALETTES = {
+    # ISSM report theme — crimson on white with charcoal support
+    "report": dict(
+        CRIMSON=_c(0x8B0000), CRIMSON_DK=_c(0x630000),
+        CRIMSON_MID=_c(0xA82B2B), CRIMSON_TINT=_c(0xF8EEEE),
+        CHARCOAL=_c(0x1F2937), CHARCOAL_TINT=_c(0xEEF0F3),
+        STEEL=_c(0x4B5563), STEEL_TINT=_c(0xF1F2F4),
+        WHITE=_c(0xFFFFFF), PANEL=_c(0xF9FAFB), BORDER=_c(0xE5E7EB),
+        INK=_c(0x1F2937), MUTED=_c(0x6B7280), MUTED_LT=_c(0x9CA3AF),
+        # dark slide backgrounds
+        DARK1=_c(0x1F2937), DARK2=_c(0x0F1722),
+        DARK_NUMERAL=_c(0x273140), DARK_PANEL=_c(0x2B3544),
+        DARK_LABEL=_c(0x8E99A8), DARK_TEXT=_c(0xD8DEE6),
+        DARK_CAPTION=_c(0x7A8493),
+        ON_DARK=_c(0xC7CED8), ON_CRIMSON=_c(0xF2D9D9),
+        ON_CRIMSON_LT=_c(0xE3B4B4), ACCENT_ON_PRIMARY=_c(0xA82B2B),
+        GHOST_HEX="8B0000",
+    ),
+    # Golden red — deep red with gold, on warm cream
+    "golden": dict(
+        CRIMSON=_c(0x9E1B1B), CRIMSON_DK=_c(0x5E0E0E),
+        CRIMSON_MID=_c(0xC0392B), CRIMSON_TINT=_c(0xFBEDEA),
+        CHARCOAL=_c(0xB8860B), CHARCOAL_TINT=_c(0xFBF3DF),
+        STEEL=_c(0x8A5A2B), STEEL_TINT=_c(0xF7F0E6),
+        WHITE=_c(0xFFFFFF), PANEL=_c(0xFDFAF4), BORDER=_c(0xEADFC8),
+        INK=_c(0x2A1F1C), MUTED=_c(0x7A6A62), MUTED_LT=_c(0xA79A92),
+        DARK1=_c(0x3E0C0C), DARK2=_c(0x1C0404),
+        DARK_NUMERAL=_c(0x521111), DARK_PANEL=_c(0x561616),
+        DARK_LABEL=_c(0xC29A6B), DARK_TEXT=_c(0xEADCCB),
+        DARK_CAPTION=_c(0x9A7B6B),
+        ON_DARK=_c(0xE3D6C4), ON_CRIMSON=_c(0xF7E4D6),
+        ON_CRIMSON_LT=_c(0xE0B978), ACCENT_ON_PRIMARY=_c(0xC9A227),
+        GHOST_HEX="B8860B",
+    ),
 }
+
+TOKENS = tuple(PALETTES["report"].keys())
+_ACTIVE = "report"
+
+# tokens are injected as module globals so every reference resolves at call time
+globals().update(PALETTES[_ACTIVE])
+
+# Legacy names kept so the unit content files need no changes. The old rainbow
+# palette collapses onto the active theme's primary / secondary / tertiary.
+NAVY = INK                                                    # noqa: F821
+BLUE = RED = AMBER = CRIMSON                                  # noqa: F821
+TEAL = GREEN = CHARCOAL                                       # noqa: F821
+VIOLET = STEEL                                                # noqa: F821
+BLUE_LIGHT = AMBER_LIGHT = RED_LIGHT = CRIMSON_TINT           # noqa: F821
+TEAL_LIGHT = GREEN_LIGHT = CHARCOAL_TINT                      # noqa: F821
+VIOLET_LIGHT = STEEL_TINT                                     # noqa: F821
+NAVY_SOFT = STEEL                                             # noqa: F821
+
+# convenient semantic handles for new decks: read as deck.A1 / deck.A2 / deck.A3
+A1, A2, A3 = CRIMSON, CHARCOAL, STEEL                         # noqa: F821
+ACCENTS = [A1, A2, A3, A1, A2, A3]
+ACCENT_TINTS = {}
+
+
+def _rebuild_derived():
+    """Refresh everything computed from the raw tokens."""
+    g = globals()
+    g["NAVY"] = g["INK"]
+    g["BLUE"] = g["RED"] = g["AMBER"] = g["CRIMSON"]
+    g["TEAL"] = g["GREEN"] = g["CHARCOAL"]
+    g["VIOLET"] = g["STEEL"]
+    g["BLUE_LIGHT"] = g["AMBER_LIGHT"] = g["RED_LIGHT"] = g["CRIMSON_TINT"]
+    g["TEAL_LIGHT"] = g["GREEN_LIGHT"] = g["CHARCOAL_TINT"]
+    g["VIOLET_LIGHT"] = g["STEEL_TINT"]
+    g["NAVY_SOFT"] = g["STEEL"]
+    g["A1"], g["A2"], g["A3"] = g["CRIMSON"], g["CHARCOAL"], g["STEEL"]
+    g["ACCENTS"] = [g["A1"], g["A2"], g["A3"], g["A1"], g["A2"], g["A3"]]
+    g["ACCENT_TINTS"] = {
+        str(g["CRIMSON"]): g["CRIMSON_TINT"],
+        str(g["CHARCOAL"]): g["CHARCOAL_TINT"],
+        str(g["STEEL"]): g["STEEL_TINT"],
+    }
+
+
+_rebuild_derived()
 
 
 def tint(color):
     return ACCENT_TINTS.get(str(color), CRIMSON_TINT)
+
+
+# --------------------------------------------------------------------------
+# Palette switching
+#
+# Colour defaults in function signatures bind at definition time, so switching
+# palette has to rewrite them. The token used by each default is recorded once
+# from the source, then re-resolved whenever the palette changes.
+# --------------------------------------------------------------------------
+_COLOUR_DEFAULTS = None
+
+
+def _index_colour_defaults():
+    """Map qualified function name -> {parameter: token} for colour defaults."""
+    import ast
+    import os
+    index = {}
+    try:
+        src = open(os.path.abspath(__file__), encoding="utf-8").read()
+        tree = ast.parse(src)
+    except Exception:
+        return index
+
+    def scan(node, prefix=""):
+        for child in node.body:
+            if isinstance(child, ast.ClassDef):
+                scan(child, prefix + child.name + ".")
+            elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                args = child.args
+                params = list(args.posonlyargs) + list(args.args) \
+                    if hasattr(args, "posonlyargs") else list(args.args)
+                defaults = list(args.defaults)
+                found = {}
+                for name, default in zip(params[len(params) - len(defaults):],
+                                        defaults):
+                    if isinstance(default, ast.Name) and default.id in TOKENS:
+                        found[name.arg] = default.id
+                if found:
+                    index[prefix + child.name] = found
+
+    scan(tree)
+    return index
+
+
+def _resolve_fn(qual):
+    obj = globals()
+    parts = qual.split(".")
+    target = obj.get(parts[0])
+    for p in parts[1:]:
+        target = getattr(target, p, None)
+    return target
+
+
+def set_palette(name):
+    """Activate a palette. Call before building a deck."""
+    global _ACTIVE, _COLOUR_DEFAULTS
+    if name not in PALETTES:
+        raise ValueError(f"unknown palette {name!r}; have {list(PALETTES)}")
+    if _COLOUR_DEFAULTS is None:
+        _COLOUR_DEFAULTS = _index_colour_defaults()
+    _ACTIVE = name
+    values = PALETTES[name]
+    globals().update(values)
+    _rebuild_derived()
+
+    import inspect
+    for qual, mapping in _COLOUR_DEFAULTS.items():
+        fn = _resolve_fn(qual)
+        fn = getattr(fn, "__func__", fn)
+        if not callable(fn) or not getattr(fn, "__defaults__", None):
+            continue
+        try:
+            params = [p for p in inspect.signature(fn).parameters.values()
+                      if p.default is not inspect.Parameter.empty
+                      and p.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD]
+        except (TypeError, ValueError):
+            continue
+        defaults = list(fn.__defaults__)
+        if len(params) != len(defaults):
+            continue
+        for i, p in enumerate(params):
+            if p.name in mapping:
+                defaults[i] = values[mapping[p.name]]
+        fn.__defaults__ = tuple(defaults)
+    return name
+
+
+def active_palette():
+    return _ACTIVE
 
 
 # --------------------------------------------------------------------------
@@ -230,6 +361,18 @@ def vline(slide, x, y, h, color=CRIMSON, weight=1.6):
     return s
 
 
+def luminance(color):
+    """Perceived brightness 0-1, used to pick readable text on any fill."""
+    r, g, b = color[0] / 255.0, color[1] / 255.0, color[2] / 255.0
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def on(fill, light=None, dark=None):
+    """Readable text colour for the given background fill."""
+    return (dark if dark is not None else INK) if luminance(fill) > 0.55 \
+        else (light if light is not None else WHITE)
+
+
 def marker(slide, x, y, size=0.085, color=CRIMSON):
     """Small square bullet/heading marker."""
     return rect(slide, x, y, size, size, fill=color)
@@ -382,8 +525,10 @@ def num_badge(slide, x, y, n, size=0.34, fill=CRIMSON, fsize=13,
          align=PP_ALIGN.CENTER, line=1.0, first=True)
 
 
-def chip(slide, x, y, text, fill=CRIMSON, color=WHITE, size=8.0, h=0.28,
+def chip(slide, x, y, text, fill=CRIMSON, color=None, size=8.0, h=0.28,
          pad=0.34, bold=False, family="sans", line=None):
+    if color is None:                      # keep the label readable on any fill
+        color = on(fill) if fill is not None else WHITE
     w = text_width_in(text.upper(), size, bold, family) + \
         (1.3 / 72.0) * max(len(text) - 1, 0) + pad
     box = rect(slide, x, y, w, h, fill=fill, line=line)
@@ -571,8 +716,13 @@ class Deck:
         return text_height_in(text, size, w - 0.19, False, 1.1, family) + 0.1
 
     def _band(self, slide, y, text, label=None, fill=CRIMSON, h=0.62,
-              color=WHITE, label_color=ON_CRIMSON_LT):
-        """Full-width crimson callout strip."""
+              color=None, label_color=None):
+        """Full-width callout strip, with text that adapts to the fill."""
+        if color is None:
+            color = on(fill)
+        if label_color is None:
+            # a softened version of the text colour for the small label
+            label_color = ON_CRIMSON_LT if luminance(fill) <= 0.55 else MUTED
         rect(slide, ML, y, CW, h, fill=fill)
         tf = textbox(slide, ML + 0.3, y, CW - 0.6, h, anchor=MSO_ANCHOR.MIDDLE)
         parts = []
@@ -618,7 +768,7 @@ class Deck:
 
         x = ML + 0.32
         # eyebrow chip naming the subject
-        chip(s, x, 1.66, self.subject, fill=CRIMSON_MID, color=WHITE, size=8.5,
+        chip(s, x, 1.66, self.subject, fill=ACCENT_ON_PRIMARY, size=8.5,
              h=0.32, pad=0.44)
 
         tw = 9.35
@@ -648,7 +798,7 @@ class Deck:
             cy = sy + subh + 0.40
             for c in chips:
                 w = chip(s, cx, cy, c, fill=None, color=ON_CRIMSON_LT,
-                         size=8.0, h=chips_h, pad=0.40, line=CRIMSON_MID)
+                         size=8.0, h=chips_h, pad=0.40, line=ACCENT_ON_PRIMARY)
                 cx += w + 0.13
 
         # presenter panels, in the reference deck's bottom-box style
@@ -661,7 +811,7 @@ class Deck:
             vw = max(text_width_in(value, 14, False, "serif"),
                      text_width_in(label, 8, False, "sans")) + 0.42
             vw = max(vw, 1.9)
-            vline(s, bx, by, bh, CRIMSON_MID, 1.6)
+            vline(s, bx, by, bh, ACCENT_ON_PRIMARY, 1.6)
             tf = textbox(s, bx + 0.20, by + 0.06, vw, 0.2)
             para(tf, label.upper(), size=8.0, color=ON_CRIMSON_LT, spacing=1.3,
                  line=1.0, first=True)
@@ -706,16 +856,16 @@ class Deck:
 
     def section_slide(self, number, title, blurb=None, accent=CRIMSON):
         s = self._new(footer=False, bg=None)
-        gradient_bg(s, CHARCOAL, CHARCOAL_DK, 315.0)
+        gradient_bg(s, DARK1, DARK2, 315.0)
         ghost(s, 9.6, -1.4, 5.8, 5.8, "FFFFFF", 2400)
-        ghost(s, 11.6, 4.0, 3.8, 3.8, "8B0000", 9000)
+        ghost(s, 11.6, 4.0, 3.8, 3.8, GHOST_HEX, 9000)
         if self.logo:
             place_logo(s, self.logo, 0, 0.62, 0.78, on_dark=True, max_w=2.2,
                        right_edge=ML + CW - 0.06)
         x = ML + 0.32
         # oversized faint section numeral fills the right of the divider
         tf = textbox(s, 7.9, 1.28, 4.9, 4.4)
-        para(tf, f"{number:02d}", size=190, color=RGBColor(0x27, 0x31, 0x40),
+        para(tf, f"{number:02d}", size=190, color=DARK_NUMERAL,
              family="serif", align=PP_ALIGN.RIGHT, line=1.0, first=True)
 
         tw = 8.0
@@ -739,7 +889,7 @@ class Deck:
             para(tf, blurb, size=12.5, color=ON_DARK, line=1.38, first=True)
         caption(s, x, FOOTER_Y,
                 f"{self.PRESENTER}  ·  Register No. {self.REGISTER}", w=5.0,
-                color=RGBColor(0x7A, 0x84, 0x93))
+                color=DARK_CAPTION)
         return s
 
     def bullets_slide(self, kicker, title, bullets, sub=None, lead=None,
@@ -752,7 +902,7 @@ class Deck:
             rect(s, BODY_X, y, BODY_W, 0.62, fill=accent)
             tf = textbox(s, BODY_X + 0.28, y, BODY_W - 0.56, 0.62,
                          anchor=MSO_ANCHOR.MIDDLE)
-            para(tf, lead, size=lsize, color=WHITE, line=1.25, first=True)
+            para(tf, lead, size=lsize, color=on(accent), line=1.25, first=True)
             y += 0.62 + 0.30
 
         cols = 2 if two_col else 1
@@ -814,7 +964,8 @@ class Deck:
             yy = y + r * (ch + gy)
             if tinted:
                 rect(s, x, yy, cw, ch, fill=acc)
-                hcol, bcol = WHITE, (ON_CRIMSON if acc == CRIMSON else ON_DARK)
+                hcol = on(acc)
+                bcol = ON_CRIMSON if hcol == WHITE else MUTED
             else:
                 card(s, x, yy, cw, ch, fill=PANEL, line=BORDER)
                 vline(s, x, yy, ch, acc, 1.6)
@@ -864,7 +1015,7 @@ class Deck:
             rect(s, x, y, cw, 0.34, fill=acc)
             tf = textbox(s, x + 0.24, y, cw - 0.48, 0.34,
                          anchor=MSO_ANCHOR.MIDDLE)
-            para(tf, side["label"].upper(), size=8.5, color=WHITE, spacing=1.3,
+            para(tf, side["label"].upper(), size=8.5, color=on(acc), spacing=1.3,
                  line=1.0, first=True)
             pad = 0.28
             iw = cw - pad * 2
@@ -904,7 +1055,8 @@ class Deck:
             x = BODY_X + i * (cw + gx)
             acc = accent[i % len(accent)] if isinstance(accent, list) else accent
             num_badge(s, x + cw / 2 - 0.19, cy - 0.19, i + 1, size=0.38,
-                      fill=acc, fsize=13, family="serif")
+                      fill=acc, fsize=13, family="serif",
+                      color=on(acc))
             card(s, x, cy + 0.38, cw, cardh, fill=PANEL, line=BORDER)
             hline(s, x, cy + 0.38, cw, acc, 1.4)
             lsize = autosize(label, iw0, 0.6, 11.5, True, 1.18, min_size=9.5)
@@ -939,7 +1091,8 @@ class Deck:
             card(s, x, yy, w, h, fill=PANEL, line=BORDER)
             vline(s, x, yy, h, acc, 1.6)
             num_badge(s, x + 0.22, yy + h / 2 - 0.16, f"L{i + 1}", size=0.32,
-                      fill=acc, fsize=10, family="sans")
+                      fill=acc, fsize=10, family="sans",
+                      color=on(acc))
             lw2 = min(3.0, w - 1.15)
             lsize = autosize(label, lw2, h - 0.3, 12, True, 1.18, min_size=10)
             lh = text_height_in(label, lsize, lw2, True, 1.18)
@@ -991,7 +1144,7 @@ class Deck:
             para(tf, desc, size=dsize, color=MUTED, line=1.32, first=True)
         if note:
             self._band(s, BODY_BOTTOM - 0.62, note, fill=CHARCOAL,
-                       label_color=RGBColor(0x9A, 0xA4, 0xB2))
+                       label_color=DARK_LABEL)
         return s
 
     def quadrant_slide(self, kicker, title, quads, sub=None, accent=CRIMSON):
@@ -1061,7 +1214,8 @@ class Deck:
             cell.margin_top = cell.margin_bottom = Inches(0.08)
             cell.vertical_anchor = MSO_ANCHOR.MIDDLE
             cell.text_frame.word_wrap = True
-            para(cell.text_frame, htxt.upper(), size=head_size, color=WHITE,
+            para(cell.text_frame, htxt.upper(), size=head_size,
+                 color=on(accent),
                  spacing=1.1, line=1.15, first=True)
         for r, row in enumerate(rows, start=1):
             for c, val in enumerate(row):
@@ -1145,7 +1299,7 @@ class Deck:
                        right_edge=ML + CW - 0.06)
         if kicker:
             w = chip_width(kicker, 8.5, False, 1.3, 0.44)
-            chip(s, SW / 2 - w / 2, 2.30, kicker, fill=CRIMSON_MID, color=WHITE,
+            chip(s, SW / 2 - w / 2, 2.30, kicker, fill=ACCENT_ON_PRIMARY,
                  size=8.5, h=0.30, pad=0.44)
         qw = SW - 3.4
         qsize = autosize(statement, qw, 2.1, 30, False, 1.18, min_size=20,
@@ -1185,7 +1339,8 @@ class Deck:
             card(s, x, yy, cw, h, fill=PANEL, line=BORDER)
             vline(s, x, yy, h, acc, 1.6)
             num_badge(s, x + 0.26, yy + h / 2 - 0.16, i + 1, size=0.32,
-                      fill=acc, fsize=12, family="serif")
+                      fill=acc, fsize=12, family="serif",
+                      color=on(acc))
             iw = cw - 1.06
             budget = h - 0.24
             hsize = autosize(head, iw, budget * (0.54 if desc else 1.0), 12,
@@ -1207,9 +1362,9 @@ class Deck:
 
     def closing_slide(self, title="Thank you", subtitle=None, questions=None):
         s = self._new(footer=False, bg=None)
-        gradient_bg(s, CHARCOAL, CHARCOAL_DK, 315.0)
+        gradient_bg(s, DARK1, DARK2, 315.0)
         ghost(s, 9.4, -1.6, 6.0, 6.0, "FFFFFF", 2400)
-        ghost(s, 11.4, 3.8, 4.0, 4.0, "8B0000", 9000)
+        ghost(s, 11.4, 3.8, 4.0, 4.0, GHOST_HEX, 9000)
         if self.logo:
             place_logo(s, self.logo, 0, 0.62, 0.8, on_dark=True, max_w=2.3,
                        right_edge=ML + CW - 0.06)
@@ -1239,15 +1394,15 @@ class Deck:
             qh = min(1.30, 5.98 - qy)
             for i, q in enumerate(questions):
                 qx = ML + i * (qw + gx)
-                rect(s, qx, qy, qw, qh, fill=RGBColor(0x2B, 0x35, 0x44),
+                rect(s, qx, qy, qw, qh, fill=DARK_PANEL,
                      line=None)
                 vline(s, qx, qy, qh, CRIMSON, 1.6)
                 iw = qw - 0.46
                 qs = autosize(q, iw, qh - 0.54, 10, False, 1.32, min_size=8.0)
                 eyebrow(s, qx + 0.24, qy + 0.20, f"Question {i + 1}",
-                        color=RGBColor(0x8E, 0x99, 0xA8), size=7.5, w=iw)
+                        color=DARK_LABEL, size=7.5, w=iw)
                 tf = textbox(s, qx + 0.24, qy + 0.46, iw, qh - 0.62)
-                para(tf, q, size=qs, color=RGBColor(0xD8, 0xDE, 0xE6),
+                para(tf, q, size=qs, color=DARK_TEXT,
                      line=1.32, first=True)
         # presenter sign-off bar
         rect(s, ML, 6.30, CW, 0.62, fill=CRIMSON)
