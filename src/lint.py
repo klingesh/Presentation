@@ -52,10 +52,13 @@ def lint(path, tol=0.06):
                 runs = p.runs
                 size = None
                 bold = False
+                family = "sans"
                 for r in runs:
                     if r.font.size:
                         size = r.font.size.pt
                         bold = bool(r.font.bold)
+                        if (r.font.name or "") == D.SERIF:
+                            family = "serif"
                         break
                 size = size or 18.0
                 ls = p.line_spacing or 1.2
@@ -63,8 +66,8 @@ def lint(path, tol=0.06):
                     ls = 1.2
                 sb = (p.space_before.pt if p.space_before else 0) / 72.0
                 sa = (p.space_after.pt if p.space_after else 0) / 72.0
-                lines = D.fit(ptxt, size, iw, bold=bold)
-                total += lines * D.line_height_in(size, ls) + sb + sa
+                lines = D.fit(ptxt, size, iw, bold=bold, family=family)
+                total += lines * D.line_height_in(size, ls, family) + sb + sa
             if total > ih + tol:
                 issues.append((idx, "overflow",
                                f"needs {total:.2f}in, box {ih:.2f}in :: "

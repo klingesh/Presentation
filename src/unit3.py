@@ -1,5 +1,6 @@
 """UNIT 3 — Business Application in AI."""
 
+import embed_fonts
 from deck import (Deck, notes, BLUE, TEAL, AMBER, VIOLET, GREEN, RED)
 
 OUT = "Unit 3 - Business Application in AI.pptx"
@@ -334,6 +335,7 @@ def build(outdir="."):
 
     path = f"{outdir}/{OUT}"
     d.save(path)
+    embed_fonts.embed(path)      # travel with the theme fonts
     return path
 
 

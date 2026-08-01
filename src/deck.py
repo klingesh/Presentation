@@ -1,12 +1,12 @@
 """
-deck.py — a small corporate presentation design system built on python-pptx.
+deck.py — corporate presentation design system (ISSM report theme).
 
-Everything the five unit decks need lives here: palette, type scale, grid and a
-set of reusable slide layouts (title, agenda, section, bullets, cards, compare,
-process, quadrant, stats, table, steps, closing).
+Styled to match the ISSM Business School report template: crimson and charcoal
+on white, Sorts Mill Goudy for headings and figures, Quattrocento Sans for
+body copy, numbered section badges, panel-and-card anatomy and small captions.
 
-Design intent: clean consulting-style slides, lots of white space, one idea per
-slide, short plain-English copy.
+The public API (Deck + its layout methods) is deliberately unchanged, so the
+per-unit content files drive this theme without edits.
 """
 
 from pptx import Presentation
@@ -15,67 +15,302 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.oxml.ns import qn
-from copy import deepcopy
-import re
+from pptx.oxml import parse_xml
 
 # --------------------------------------------------------------------------
-# Palette
+# Palettes
+#
+# Two themes ship with the system. Every colour lives in a named token, so a
+# deck can switch theme with set_palette() before it is built. CRIMSON is the
+# primary accent, CHARCOAL the secondary and STEEL the tertiary — the names are
+# historical; what they resolve to depends on the active palette.
 # --------------------------------------------------------------------------
-NAVY       = RGBColor(0x0E, 0x1E, 0x3C)   # primary dark
-NAVY_DEEP  = RGBColor(0x07, 0x12, 0x28)   # gradient end
-NAVY_SOFT  = RGBColor(0x1B, 0x33, 0x5E)   # panels on dark
-BLUE       = RGBColor(0x3B, 0x7A, 0xF7)   # primary accent
-BLUE_LIGHT = RGBColor(0xE8, 0xF0, 0xFE)   # tinted panel
-TEAL       = RGBColor(0x00, 0xB3, 0xA4)
-TEAL_LIGHT = RGBColor(0xE0, 0xF7, 0xF4)
-AMBER      = RGBColor(0xF5, 0xA6, 0x23)
-AMBER_LIGHT= RGBColor(0xFE, 0xF4, 0xE2)
-RED        = RGBColor(0xE0, 0x51, 0x51)
-RED_LIGHT  = RGBColor(0xFD, 0xED, 0xED)
-GREEN      = RGBColor(0x27, 0xA0, 0x6A)
-GREEN_LIGHT= RGBColor(0xE7, 0xF5, 0xEF)
-VIOLET     = RGBColor(0x74, 0x5C, 0xE0)
-VIOLET_LIGHT = RGBColor(0xEE, 0xEB, 0xFC)
+def _c(v):
+    return RGBColor((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
 
-WHITE      = RGBColor(0xFF, 0xFF, 0xFF)
-PAPER      = RGBColor(0xF6, 0xF8, 0xFB)   # light panel
-BORDER     = RGBColor(0xDD, 0xE3, 0xEC)
-INK        = RGBColor(0x14, 0x1C, 0x2E)   # body text
-MUTED      = RGBColor(0x63, 0x6E, 0x85)   # secondary text
-MUTED_LT   = RGBColor(0x93, 0x9E, 0xB3)
 
-ACCENTS = [BLUE, TEAL, AMBER, VIOLET, GREEN, RED]
-ACCENT_TINTS = {
-    str(BLUE): BLUE_LIGHT, str(TEAL): TEAL_LIGHT, str(AMBER): AMBER_LIGHT,
-    str(VIOLET): VIOLET_LIGHT, str(GREEN): GREEN_LIGHT, str(RED): RED_LIGHT,
+PALETTES = {
+    # ISSM report theme — crimson on white with charcoal support
+    "report": dict(
+        CRIMSON=_c(0x8B0000), CRIMSON_DK=_c(0x630000),
+        CRIMSON_MID=_c(0xA82B2B), CRIMSON_TINT=_c(0xF8EEEE),
+        CHARCOAL=_c(0x1F2937), CHARCOAL_TINT=_c(0xEEF0F3),
+        STEEL=_c(0x4B5563), STEEL_TINT=_c(0xF1F2F4),
+        WHITE=_c(0xFFFFFF), PANEL=_c(0xF9FAFB), BORDER=_c(0xE5E7EB),
+        INK=_c(0x1F2937), MUTED=_c(0x6B7280), MUTED_LT=_c(0x9CA3AF),
+        # dark slide backgrounds
+        DARK1=_c(0x1F2937), DARK2=_c(0x0F1722),
+        DARK_NUMERAL=_c(0x273140), DARK_PANEL=_c(0x2B3544),
+        DARK_LABEL=_c(0x8E99A8), DARK_TEXT=_c(0xD8DEE6),
+        DARK_CAPTION=_c(0x7A8493),
+        ON_DARK=_c(0xC7CED8), ON_CRIMSON=_c(0xF2D9D9),
+        ON_CRIMSON_LT=_c(0xE3B4B4), ACCENT_ON_PRIMARY=_c(0xA82B2B),
+        GHOST_HEX="8B0000",
+    ),
+    # Golden red — deep red with gold, on warm cream
+    "golden": dict(
+        CRIMSON=_c(0x9E1B1B), CRIMSON_DK=_c(0x5E0E0E),
+        CRIMSON_MID=_c(0xC0392B), CRIMSON_TINT=_c(0xFBEDEA),
+        CHARCOAL=_c(0xB8860B), CHARCOAL_TINT=_c(0xFBF3DF),
+        STEEL=_c(0x8A5A2B), STEEL_TINT=_c(0xF7F0E6),
+        WHITE=_c(0xFFFFFF), PANEL=_c(0xFDFAF4), BORDER=_c(0xEADFC8),
+        INK=_c(0x2A1F1C), MUTED=_c(0x7A6A62), MUTED_LT=_c(0xA79A92),
+        DARK1=_c(0x3E0C0C), DARK2=_c(0x1C0404),
+        DARK_NUMERAL=_c(0x521111), DARK_PANEL=_c(0x561616),
+        DARK_LABEL=_c(0xC29A6B), DARK_TEXT=_c(0xEADCCB),
+        DARK_CAPTION=_c(0x9A7B6B),
+        ON_DARK=_c(0xE3D6C4), ON_CRIMSON=_c(0xF7E4D6),
+        ON_CRIMSON_LT=_c(0xE0B978), ACCENT_ON_PRIMARY=_c(0xC9A227),
+        GHOST_HEX="B8860B",
+    ),
 }
 
-FONT = "Segoe UI"
-FONT_LIGHT = "Segoe UI Light"
+TOKENS = tuple(PALETTES["report"].keys())
+_ACTIVE = "report"
+
+# tokens are injected as module globals so every reference resolves at call time
+globals().update(PALETTES[_ACTIVE])
+
+# Legacy names kept so the unit content files need no changes. The old rainbow
+# palette collapses onto the active theme's primary / secondary / tertiary.
+NAVY = INK                                                    # noqa: F821
+BLUE = RED = AMBER = CRIMSON                                  # noqa: F821
+TEAL = GREEN = CHARCOAL                                       # noqa: F821
+VIOLET = STEEL                                                # noqa: F821
+BLUE_LIGHT = AMBER_LIGHT = RED_LIGHT = CRIMSON_TINT           # noqa: F821
+TEAL_LIGHT = GREEN_LIGHT = CHARCOAL_TINT                      # noqa: F821
+VIOLET_LIGHT = STEEL_TINT                                     # noqa: F821
+NAVY_SOFT = STEEL                                             # noqa: F821
+
+# convenient semantic handles for new decks: read as deck.A1 / deck.A2 / deck.A3
+A1, A2, A3 = CRIMSON, CHARCOAL, STEEL                         # noqa: F821
+ACCENTS = [A1, A2, A3, A1, A2, A3]
+ACCENT_TINTS = {}
+
+
+def _rebuild_derived():
+    """Refresh everything computed from the raw tokens."""
+    g = globals()
+    g["NAVY"] = g["INK"]
+    g["BLUE"] = g["RED"] = g["AMBER"] = g["CRIMSON"]
+    g["TEAL"] = g["GREEN"] = g["CHARCOAL"]
+    g["VIOLET"] = g["STEEL"]
+    g["BLUE_LIGHT"] = g["AMBER_LIGHT"] = g["RED_LIGHT"] = g["CRIMSON_TINT"]
+    g["TEAL_LIGHT"] = g["GREEN_LIGHT"] = g["CHARCOAL_TINT"]
+    g["VIOLET_LIGHT"] = g["STEEL_TINT"]
+    g["NAVY_SOFT"] = g["STEEL"]
+    g["A1"], g["A2"], g["A3"] = g["CRIMSON"], g["CHARCOAL"], g["STEEL"]
+    g["ACCENTS"] = [g["A1"], g["A2"], g["A3"], g["A1"], g["A2"], g["A3"]]
+    g["ACCENT_TINTS"] = {
+        str(g["CRIMSON"]): g["CRIMSON_TINT"],
+        str(g["CHARCOAL"]): g["CHARCOAL_TINT"],
+        str(g["STEEL"]): g["STEEL_TINT"],
+    }
+
+
+_rebuild_derived()
+
+
+def tint(color):
+    return ACCENT_TINTS.get(str(color), CRIMSON_TINT)
+
 
 # --------------------------------------------------------------------------
-# Grid (16:9 — 13.333in x 7.5in)
+# Palette switching
+#
+# Colour defaults in function signatures bind at definition time, so switching
+# palette has to rewrite them. The token used by each default is recorded once
+# from the source, then re-resolved whenever the palette changes.
+# --------------------------------------------------------------------------
+_COLOUR_DEFAULTS = None
+
+
+def _index_colour_defaults():
+    """Map qualified function name -> {parameter: token} for colour defaults."""
+    import ast
+    import os
+    index = {}
+    try:
+        src = open(os.path.abspath(__file__), encoding="utf-8").read()
+        tree = ast.parse(src)
+    except Exception:
+        return index
+
+    def scan(node, prefix=""):
+        for child in node.body:
+            if isinstance(child, ast.ClassDef):
+                scan(child, prefix + child.name + ".")
+            elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                args = child.args
+                params = list(args.posonlyargs) + list(args.args) \
+                    if hasattr(args, "posonlyargs") else list(args.args)
+                defaults = list(args.defaults)
+                found = {}
+                for name, default in zip(params[len(params) - len(defaults):],
+                                        defaults):
+                    if isinstance(default, ast.Name) and default.id in TOKENS:
+                        found[name.arg] = default.id
+                if found:
+                    index[prefix + child.name] = found
+
+    scan(tree)
+    return index
+
+
+def _resolve_fn(qual):
+    obj = globals()
+    parts = qual.split(".")
+    target = obj.get(parts[0])
+    for p in parts[1:]:
+        target = getattr(target, p, None)
+    return target
+
+
+def set_palette(name):
+    """Activate a palette. Call before building a deck."""
+    global _ACTIVE, _COLOUR_DEFAULTS
+    if name not in PALETTES:
+        raise ValueError(f"unknown palette {name!r}; have {list(PALETTES)}")
+    if _COLOUR_DEFAULTS is None:
+        _COLOUR_DEFAULTS = _index_colour_defaults()
+    _ACTIVE = name
+    values = PALETTES[name]
+    globals().update(values)
+    _rebuild_derived()
+
+    import inspect
+    for qual, mapping in _COLOUR_DEFAULTS.items():
+        fn = _resolve_fn(qual)
+        fn = getattr(fn, "__func__", fn)
+        if not callable(fn) or not getattr(fn, "__defaults__", None):
+            continue
+        try:
+            params = [p for p in inspect.signature(fn).parameters.values()
+                      if p.default is not inspect.Parameter.empty
+                      and p.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD]
+        except (TypeError, ValueError):
+            continue
+        defaults = list(fn.__defaults__)
+        if len(params) != len(defaults):
+            continue
+        for i, p in enumerate(params):
+            if p.name in mapping:
+                defaults[i] = values[mapping[p.name]]
+        fn.__defaults__ = tuple(defaults)
+    return name
+
+
+def active_palette():
+    return _ACTIVE
+
+
+# --------------------------------------------------------------------------
+# Typography
+# --------------------------------------------------------------------------
+SERIF = "Sorts Mill Goudy"      # headings, titles, big figures (no bold cut)
+SANS = "Quattrocento Sans"      # body copy, labels, captions
+FONT = SANS                     # back-compat alias
+
+FONT_DIR = "/usr/share/fonts/issm"
+FONT_FILES = {
+    ("sans", False): f"{FONT_DIR}/QuattrocentoSans-Regular.ttf",
+    ("sans", True): f"{FONT_DIR}/QuattrocentoSans-Bold.ttf",
+    # Sorts Mill Goudy ships regular + italic only; bold is synthesised
+    ("serif", False): f"{FONT_DIR}/SortsMillGoudy-Regular.ttf",
+    ("serif", True): f"{FONT_DIR}/SortsMillGoudy-Regular.ttf",
+}
+# PowerPoint percentage line spacing scales the font's own line height
+LINE_FACTORS = {"sans": 1.108, "serif": 1.438}
+TYPEFACE = {"sans": SANS, "serif": SERIF}
+
+_PIL_CACHE = {}
+_SCALE = 8
+
+
+def _pil_font(size, bold, family):
+    key = (round(float(size), 2), bool(bold), family)
+    if key not in _PIL_CACHE:
+        from PIL import ImageFont
+        _PIL_CACHE[key] = ImageFont.truetype(
+            FONT_FILES[(family, bool(bold))], max(1, int(round(size * _SCALE))))
+    return _PIL_CACHE[key]
+
+
+def text_width_in(text, size, bold=False, family="sans"):
+    if not text:
+        return 0.0
+    try:
+        f = _pil_font(size, bold, family)
+        w = (f.getlength(text) / _SCALE) / 72.0
+        if family == "serif" and bold:
+            w *= 1.03           # allow for synthesised bold
+        return w
+    except Exception:
+        return len(text) * size * 0.5 / 72.0
+
+
+def fit(text, size, width_in, bold=False, family="sans"):
+    """Number of wrapped lines the text needs inside width_in."""
+    total = 0
+    for hard in str(text).replace("\v", "\n").replace("\x0b", "\n").split("\n"):
+        if not hard.strip():
+            total += 1
+            continue
+        lines, cur = 1, ""
+        for w in hard.split():
+            trial = (cur + " " + w).strip()
+            if cur and text_width_in(trial, size, bold, family) > width_in:
+                lines += 1
+                cur = w
+            else:
+                cur = trial
+        total += lines
+    return max(total, 1)
+
+
+def line_height_in(size, line=1.25, family="sans"):
+    return size * LINE_FACTORS[family] * line / 72.0
+
+
+def text_height_in(text, size, width_in, bold=False, line=1.25, family="sans"):
+    return fit(text, size, width_in, bold, family) * line_height_in(size, line,
+                                                                   family)
+
+
+def autosize(text, width_in, height_in, size, bold=False, line=1.25,
+             min_size=8.0, step=0.5, family="sans"):
+    s = float(size)
+    while s > min_size and text_height_in(text, s, width_in, bold, line,
+                                         family) > height_in:
+        s -= step
+    return s
+
+
+# --------------------------------------------------------------------------
+# Grid (16:9 — 13.333 x 7.5 in)
 # --------------------------------------------------------------------------
 SW, SH = 13.333, 7.5
-ML, MR = 0.78, 0.78                 # side margins
-CW = SW - ML - MR                   # content width  = 11.773
-BODY_TOP = 1.78                     # first row of content on a normal slide
-BODY_BOTTOM = 6.62                  # content must end above this
-FOOTER_Y = 6.86
+ML, MR = 0.62, 0.62
+CW = SW - ML - MR                # 12.093
+BODY_INDENT = 0.30               # body sits right of the vertical crimson rule
+BODY_X = ML + BODY_INDENT
+BODY_W = CW - BODY_INDENT
+BODY_BOTTOM = 6.66
+FOOTER_Y = 6.94
 
 
 def _i(v):
-    return Inches(v) if not isinstance(v, (Emu,)) else v
+    return Inches(v) if not isinstance(v, Emu) else v
 
 
 # --------------------------------------------------------------------------
-# Low-level shape helpers
+# Shape helpers — flat, bordered, square-cornered (report style)
 # --------------------------------------------------------------------------
-def rect(slide, x, y, w, h, fill=None, line=None, lw=1.0, shape=MSO_SHAPE.RECTANGLE,
-         radius=None, shadow=False):
+def rect(slide, x, y, w, h, fill=None, line=None, lw=0.75,
+         shape=MSO_SHAPE.RECTANGLE, radius=None, shadow=False):
     s = slide.shapes.add_shape(shape, _i(x), _i(y), _i(w), _i(h))
     s.shadow.inherit = False
-    if radius is not None and shape in (MSO_SHAPE.ROUNDED_RECTANGLE,):
+    if radius is not None and shape == MSO_SHAPE.ROUNDED_RECTANGLE:
         try:
             s.adjustments[0] = radius
         except Exception:
@@ -96,11 +331,224 @@ def rect(slide, x, y, w, h, fill=None, line=None, lw=1.0, shape=MSO_SHAPE.RECTAN
     return s
 
 
-def card(slide, x, y, w, h, fill=WHITE, line=BORDER, radius=0.06, shadow=True):
-    return rect(slide, x, y, w, h, fill=fill, line=line, lw=1.0,
-                shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=radius, shadow=shadow)
+def card(slide, x, y, w, h, fill=PANEL, line=BORDER, radius=None, shadow=False):
+    """Flat bordered panel — the workhorse of this theme."""
+    return rect(slide, x, y, w, h, fill=fill, line=line, lw=0.75)
 
 
+def circle(slide, cx, cy, d, fill=CRIMSON, line=None):
+    return rect(slide, cx - d / 2, cy - d / 2, d, d, fill=fill, line=line,
+                shape=MSO_SHAPE.OVAL)
+
+
+def hline(slide, x, y, w, color=BORDER, weight=0.75):
+    s = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, _i(x), _i(y), _i(w),
+                               Pt(weight))
+    s.shadow.inherit = False
+    s.fill.solid()
+    s.fill.fore_color.rgb = color
+    s.line.fill.background()
+    return s
+
+
+def vline(slide, x, y, h, color=CRIMSON, weight=1.6):
+    s = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, _i(x), _i(y), Pt(weight),
+                               _i(h))
+    s.shadow.inherit = False
+    s.fill.solid()
+    s.fill.fore_color.rgb = color
+    s.line.fill.background()
+    return s
+
+
+def luminance(color):
+    """Perceived brightness 0-1, used to pick readable text on any fill."""
+    r, g, b = color[0] / 255.0, color[1] / 255.0, color[2] / 255.0
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def on(fill, light=None, dark=None):
+    """Readable text colour for the given background fill."""
+    return (dark if dark is not None else INK) if luminance(fill) > 0.55 \
+        else (light if light is not None else WHITE)
+
+
+def marker(slide, x, y, size=0.085, color=CRIMSON):
+    """Small square bullet/heading marker."""
+    return rect(slide, x, y, size, size, fill=color)
+
+
+def soft_shadow(shape, blur=14, dist=2, alpha=10000):
+    spPr = shape._element.spPr
+    for e in spPr.findall(qn("a:effectLst")):
+        spPr.remove(e)
+    spPr.append(parse_xml(
+        '<a:effectLst xmlns:a="http://schemas.openxmlformats.org/drawingml/'
+        f'2006/main"><a:outerShdw blurRad="{blur * 12700}" '
+        f'dist="{dist * 12700}" dir="5400000" rotWithShape="0">'
+        f'<a:srgbClr val="1F2937"><a:alpha val="{alpha}"/></a:srgbClr>'
+        '</a:outerShdw></a:effectLst>'))
+
+
+def gradient_bg(slide, c1, c2, angle=45.0):
+    s = rect(slide, 0, 0, SW, SH, fill=c1)
+    s.fill.gradient()
+    stops = s.fill.gradient_stops
+    stops[0].color.rgb = c1
+    stops[0].position = 0.0
+    stops[1].color.rgb = c2
+    stops[1].position = 1.0
+    s.fill.gradient_angle = angle
+    s.line.fill.background()
+    return s
+
+
+def ghost(slide, x, y, w, h, color="FFFFFF", alpha=6000,
+          shape=MSO_SHAPE.OVAL):
+    s = slide.shapes.add_shape(shape, _i(x), _i(y), _i(w), _i(h))
+    s.name = "deco-bleed"
+    s.shadow.inherit = False
+    s.line.fill.background()
+    spPr = s._element.spPr
+    for e in spPr.findall(qn("a:solidFill")):
+        spPr.remove(e)
+    geom = spPr.find(qn("a:prstGeom"))
+    geom.addnext(parse_xml(
+        '<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/'
+        f'2006/main"><a:srgbClr val="{color}"><a:alpha val="{alpha}"/>'
+        '</a:srgbClr></a:solidFill>'))
+    return s
+
+
+# --------------------------------------------------------------------------
+# Text helpers
+# --------------------------------------------------------------------------
+def textbox(slide, x, y, w, h, anchor=MSO_ANCHOR.TOP):
+    tb = slide.shapes.add_textbox(_i(x), _i(y), _i(w), _i(h))
+    tf = tb.text_frame
+    tf.word_wrap = True
+    tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
+    tf.vertical_anchor = anchor
+    return tf
+
+
+def style_run(run, size=11, bold=False, color=INK, family="sans", italic=False,
+              spacing=None, caps=False):
+    f = run.font
+    f.name = TYPEFACE[family]
+    f.size = Pt(size)
+    f.bold = bold
+    f.italic = italic
+    f.color.rgb = color
+    rPr = run._r.get_or_add_rPr()
+    if spacing:
+        rPr.set("spc", str(int(spacing * 100)))
+    if caps:
+        rPr.set("cap", "all")
+    for tag in ("a:ea", "a:cs"):
+        el = rPr.find(qn(tag))
+        if el is None:
+            rPr.append(parse_xml(
+                f'<{tag} xmlns:a="http://schemas.openxmlformats.org/drawingml/'
+                f'2006/main" typeface="{TYPEFACE[family]}"/>'))
+        else:
+            el.set("typeface", TYPEFACE[family])
+    return run
+
+
+def para(tf, text, size=11, bold=False, color=INK, family="sans",
+         align=PP_ALIGN.LEFT, space_before=0, space_after=0, line=1.25,
+         italic=False, spacing=None, caps=False, first=False, indent=0.0):
+    p = tf.paragraphs[0] if (first or not getattr(tf, "_used", False)) \
+        else tf.add_paragraph()
+    tf._used = True
+    p.alignment = align
+    p.space_before = Pt(space_before)
+    p.space_after = Pt(space_after)
+    p.line_spacing = line
+    if indent:
+        pPr = p._p.get_or_add_pPr()
+        pPr.set("marL", str(int(indent * 914400)))
+        pPr.set("indent", str(-int(0.18 * 914400)))
+    for j, chunk in enumerate(str(text).split("\n")):
+        if j:
+            p._p.append(parse_xml(
+                '<a:br xmlns:a="http://schemas.openxmlformats.org/drawingml/'
+                '2006/main"/>'))
+        r = p.add_run()
+        r.text = chunk
+        style_run(r, size=size, bold=bold, color=color, family=family,
+                  italic=italic, spacing=spacing, caps=caps)
+    return p
+
+
+def rich(tf, parts, size=11, color=INK, family="sans", align=PP_ALIGN.LEFT,
+         line=1.25, space_before=0, space_after=0, first=False):
+    p = tf.paragraphs[0] if (first or not getattr(tf, "_used", False)) \
+        else tf.add_paragraph()
+    tf._used = True
+    p.alignment = align
+    p.line_spacing = line
+    p.space_before = Pt(space_before)
+    p.space_after = Pt(space_after)
+    for text, ov in parts:
+        r = p.add_run()
+        r.text = text
+        style_run(r, size=ov.get("size", size), bold=ov.get("bold", False),
+                  color=ov.get("color", color), family=ov.get("family", family),
+                  italic=ov.get("italic", False), spacing=ov.get("spacing"),
+                  caps=ov.get("caps", False))
+    return p
+
+
+def eyebrow(slide, x, y, text, color=MUTED, size=8.0, w=6.0):
+    """Tiny letter-spaced uppercase label."""
+    tf = textbox(slide, x, y, w, 0.2)
+    para(tf, text.upper(), size=size, color=color, spacing=1.3, first=True,
+         line=1.0)
+    return tf
+
+
+def caption(slide, x, y, text, w=5.4, align=PP_ALIGN.LEFT, color=MUTED_LT):
+    tf = textbox(slide, x, y, w, 0.22)
+    para(tf, text, size=7.5, color=color, align=align, line=1.1, first=True)
+    return tf
+
+
+def num_badge(slide, x, y, n, size=0.34, fill=CRIMSON, fsize=13,
+              family="serif", color=WHITE, rounded=False):
+    rect(slide, x, y, size, size, fill=fill,
+         shape=MSO_SHAPE.ROUNDED_RECTANGLE if rounded else MSO_SHAPE.RECTANGLE,
+         radius=0.18 if rounded else None)
+    tf = textbox(slide, x, y + size * 0.5 - fsize * 0.011, size, size)
+    para(tf, str(n), size=fsize, color=color, family=family,
+         align=PP_ALIGN.CENTER, line=1.0, first=True)
+
+
+def chip(slide, x, y, text, fill=CRIMSON, color=None, size=8.0, h=0.28,
+         pad=0.34, bold=False, family="sans", line=None):
+    if color is None:                      # keep the label readable on any fill
+        color = on(fill) if fill is not None else WHITE
+    w = text_width_in(text.upper(), size, bold, family) + \
+        (1.3 / 72.0) * max(len(text) - 1, 0) + pad
+    box = rect(slide, x, y, w, h, fill=fill, line=line)
+    tf = box.text_frame
+    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+    tf.margin_left = tf.margin_right = 0
+    para(tf, text.upper(), size=size, color=color, family=family, bold=bold,
+         align=PP_ALIGN.CENTER, spacing=1.3, line=1.0, first=True)
+    return w
+
+
+def chip_width(text, size=8.0, bold=False, spacing=1.3, pad=0.34,
+               family="sans"):
+    return (text_width_in(text.upper(), size, bold, family)
+            + (spacing / 72.0) * max(len(text) - 1, 0) + pad)
+
+
+# --------------------------------------------------------------------------
+# Logo
+# --------------------------------------------------------------------------
 EXTS = ("png", "PNG", "jpg", "JPG", "jpeg", "JPEG", "webp", "gif")
 
 
@@ -108,15 +556,11 @@ def _assets_dir(assets_dir=None):
     import os
     if assets_dir:
         return assets_dir
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                        "assets")
 
 
 def find_logo(prefer="logo-full", assets_dir=None, fallback=True):
-    """Locate the college logo in assets/.
-
-    Looks for `prefer` (e.g. logo-full / logo-mark) first, then falls back to
-    any image in the folder, so simply dropping one file in still works.
-    """
     import glob
     import os
     d = _assets_dir(assets_dir)
@@ -135,7 +579,6 @@ def find_logo(prefer="logo-full", assets_dir=None, fallback=True):
 
 
 def logo_size(path, h, max_w=3.0):
-    """Width and height the logo will occupy at target height `h`."""
     if not path:
         return 0.0, 0.0
     try:
@@ -144,7 +587,7 @@ def logo_size(path, h, max_w=3.0):
         w = h * (pw / float(ph))
     except Exception:
         w = h
-    if w > max_w:                      # very wide logo → constrain by width
+    if w > max_w:
         h = h * (max_w / w)
         w = max_w
     return w, h
@@ -152,258 +595,24 @@ def logo_size(path, h, max_w=3.0):
 
 def place_logo(slide, path, x, y, h, on_dark=False, pad=0.13, max_w=3.0,
                right_edge=None):
-    """Drop the logo at a given height; on dark slides sit it on a white chip."""
     if not path:
         return 0.0
     w, h = logo_size(path, h, max_w)
     if right_edge is not None:
         x = right_edge - w
     if on_dark:
-        plate = rect(slide, x - pad, y - pad, w + pad * 2, h + pad * 2, fill=WHITE,
-                     line=None, shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.14)
+        plate = rect(slide, x - pad, y - pad, w + pad * 2, h + pad * 2,
+                     fill=WHITE, line=None)
         plate.name = "logo-plate"
     pic = slide.shapes.add_picture(path, _i(x), _i(y), height=_i(h))
     pic.name = "college-logo"
     return w
 
 
-def chip_width(text, size=9.5, bold=True, spacing=1.4, pad=0.36):
-    """Pill width that actually fits its label, including letter-spacing."""
-    return (text_width_in(text, size, bold)
-            + (spacing / 72.0) * max(len(text) - 1, 0) + pad)
-
-
-def circle(slide, cx, cy, d, fill=BLUE, line=None):
-    return rect(slide, cx - d / 2, cy - d / 2, d, d, fill=fill, line=line,
-                shape=MSO_SHAPE.OVAL)
-
-
-def hline(slide, x, y, w, color=BORDER, weight=1.0):
-    ln = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, _i(x), _i(y), _i(w), Pt(weight))
-    ln.shadow.inherit = False
-    ln.fill.solid()
-    ln.fill.fore_color.rgb = color
-    ln.line.fill.background()
-    return ln
-
-
-def soft_shadow(shape, blur=16, dist=3, alpha=11000):
-    """Subtle drop shadow so cards lift off the page."""
-    spPr = shape._element.spPr
-    for tag in ("a:effectLst",):
-        for e in spPr.findall(qn(tag)):
-            spPr.remove(e)
-    xml = (
-        '<a:effectLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
-        f'<a:outerShdw blurRad="{blur * 12700}" dist="{dist * 12700}" dir="5400000" '
-        'rotWithShape="0"><a:srgbClr val="0E1E3C">'
-        f'<a:alpha val="{alpha}"/></a:srgbClr></a:outerShdw></a:effectLst>'
-    )
-    from pptx.oxml import parse_xml
-    spPr.append(parse_xml(xml))
-
-
-def gradient_bg(slide, c1=NAVY, c2=NAVY_DEEP, angle=45.0):
-    s = rect(slide, 0, 0, SW, SH, fill=c1)
-    s.fill.gradient()
-    stops = s.fill.gradient_stops
-    stops[0].color.rgb = c1
-    stops[0].position = 0.0
-    stops[1].color.rgb = c2
-    stops[1].position = 1.0
-    s.fill.gradient_angle = angle
-    s.line.fill.background()
-    return s
-
-
-def ghost(slide, x, y, w, h, color=WHITE, alpha=6000, shape=MSO_SHAPE.OVAL):
-    """Very faint decorative shape used on dark slides."""
-    s = slide.shapes.add_shape(shape, _i(x), _i(y), _i(w), _i(h))
-    s.name = "deco-bleed"
-    s.shadow.inherit = False
-    s.line.fill.background()
-    from pptx.oxml import parse_xml
-    spPr = s._element.spPr
-    for e in spPr.findall(qn('a:solidFill')):
-        spPr.remove(e)
-    xml = ('<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
-           f'<a:srgbClr val="{color}"><a:alpha val="{alpha}"/></a:srgbClr></a:solidFill>')
-    # insert solidFill right after the geometry element
-    geom = spPr.find(qn('a:prstGeom'))
-    geom.addnext(parse_xml(xml))
-    return s
-
-
-# --------------------------------------------------------------------------
-# Text helpers
-# --------------------------------------------------------------------------
-def textbox(slide, x, y, w, h, anchor=MSO_ANCHOR.TOP):
-    tb = slide.shapes.add_textbox(_i(x), _i(y), _i(w), _i(h))
-    tf = tb.text_frame
-    tf.word_wrap = True
-    tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
-    tf.vertical_anchor = anchor
-    return tf
-
-
-def style_run(run, size=14, bold=False, color=INK, font=FONT, italic=False,
-              spacing=None, caps=False):
-    f = run.font
-    f.name = font
-    f.size = Pt(size)
-    f.bold = bold
-    f.italic = italic
-    f.color.rgb = color
-    rPr = run._r.get_or_add_rPr()
-    if spacing:
-        rPr.set('spc', str(int(spacing * 100)))
-    if caps:
-        rPr.set('cap', 'all')
-    # make east-asian / complex-script fonts match so nothing falls back to Calibri
-    for tag in ('a:ea', 'a:cs'):
-        el = rPr.find(qn(tag))
-        if el is None:
-            from pptx.oxml import parse_xml
-            el = parse_xml(f'<{tag} xmlns:a="http://schemas.openxmlformats.org/'
-                           f'drawingml/2006/main" typeface="{font}"/>')
-            rPr.append(el)
-        else:
-            el.set('typeface', font)
-    return run
-
-
-def para(tf, text, size=14, bold=False, color=INK, font=FONT, align=PP_ALIGN.LEFT,
-         space_before=0, space_after=0, line=1.22, italic=False, spacing=None,
-         caps=False, first=False, bullet=None, indent=0.0):
-    p = tf.paragraphs[0] if (first or (len(tf.paragraphs) == 1 and not tf.paragraphs[0].runs
-                                      and not getattr(tf, "_used", False))) else tf.add_paragraph()
-    tf._used = True
-    p.alignment = align
-    p.space_before = Pt(space_before)
-    p.space_after = Pt(space_after)
-    p.line_spacing = line
-    if indent:
-        pPr = p._p.get_or_add_pPr()
-        pPr.set('marL', str(int(indent * 914400)))
-        pPr.set('indent', str(-int(0.18 * 914400)))
-    if bullet:
-        pPr = p._p.get_or_add_pPr()
-        from pptx.oxml import parse_xml
-        pPr.append(parse_xml(
-            '<a:buFont xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
-            ' typeface="Arial"/>'))
-        pPr.append(parse_xml(
-            '<a:buChar xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
-            f' char="{bullet}"/>'))
-    from pptx.oxml import parse_xml
-    chunks = text.split("\n")
-    for j, chunk in enumerate(chunks):
-        if j:
-            p._p.append(parse_xml(
-                '<a:br xmlns:a="http://schemas.openxmlformats.org/drawingml/'
-                '2006/main"/>'))
-        r = p.add_run()
-        r.text = chunk
-        style_run(r, size=size, bold=bold, color=color, font=font, italic=italic,
-                  spacing=spacing, caps=caps)
-    return p
-
-
-def rich(tf, parts, size=14, color=INK, align=PP_ALIGN.LEFT, line=1.22,
-         space_before=0, space_after=0, first=False):
-    """parts = [(text, {overrides}), ...] inside one paragraph."""
-    p = tf.paragraphs[0] if (first or not getattr(tf, "_used", False)) else tf.add_paragraph()
-    tf._used = True
-    p.alignment = align
-    p.line_spacing = line
-    p.space_before = Pt(space_before)
-    p.space_after = Pt(space_after)
-    for text, ov in parts:
-        r = p.add_run()
-        r.text = text
-        style_run(r, size=ov.get('size', size), bold=ov.get('bold', False),
-                  color=ov.get('color', color), font=ov.get('font', FONT),
-                  italic=ov.get('italic', False), spacing=ov.get('spacing'),
-                  caps=ov.get('caps', False))
-    return p
-
-
-# ---- real text measurement (Selawik is metric-compatible with Segoe UI) ----
-_FONT_PATHS = {
-    False: "/usr/share/fonts/selawik/selawk.ttf",
-    True: "/usr/share/fonts/selawik/selawkb.ttf",
-}
-_PIL_CACHE = {}
-_SCALE = 8  # render font at 8x for sub-point precision
-
-
-def _pil_font(size, bold):
-    key = (round(float(size), 2), bool(bold))
-    if key not in _PIL_CACHE:
-        from PIL import ImageFont
-        _PIL_CACHE[key] = ImageFont.truetype(_FONT_PATHS[bool(bold)],
-                                             max(1, int(round(size * _SCALE))))
-    return _PIL_CACHE[key]
-
-
-def text_width_in(text, size, bold=False):
-    """Width of `text` in inches at `size` points."""
-    if not text:
-        return 0.0
-    try:
-        f = _pil_font(size, bold)
-        return (f.getlength(text) / _SCALE) / 72.0
-    except Exception:                                    # font missing → estimate
-        return len(text) * size * 0.50 / 72.0
-
-
-def fit(text, size, width_in, _legacy=None, bold=True):
-    """Number of wrapped lines `text` needs inside `width_in`."""
-    total = 0
-    for hard in str(text).replace("\v", "\n").replace("\x0b", "\n").split("\n"):
-        if not hard.strip():
-            total += 1
-            continue
-        lines, cur = 1, ""
-        for w in hard.split():
-            trial = (cur + " " + w).strip()
-            if cur and text_width_in(trial, size, bold) > width_in:
-                lines += 1
-                cur = w
-            else:
-                cur = trial
-        total += lines
-    return max(total, 1)
-
-
-# Segoe UI / Selawik natural line height as a multiple of the em size.
-# PowerPoint percentage line spacing scales THIS, not the point size.
-LINE_FACTOR = 1.201
-
-
-def line_height_in(size, line=1.25):
-    return size * LINE_FACTOR * line / 72.0
-
-
-def text_height_in(text, size, width_in, bold=False, line=1.25):
-    """Height the wrapped text will occupy, in inches."""
-    return fit(text, size, width_in, bold=bold) * line_height_in(size, line)
-
-
-def autosize(text, width_in, height_in, size, bold=False, line=1.25,
-             min_size=8.5, step=0.5):
-    """Largest font size <= `size` whose wrapped text fits the given box."""
-    s = float(size)
-    while s > min_size and text_height_in(text, s, width_in, bold, line) > height_in:
-        s -= step
-    return s
-
-
 # ==========================================================================
 # Deck
 # ==========================================================================
 class Deck:
-    # presenter details, shared by every deck
     PRESENTER = "Lingesh K"
     REGISTER = "OSI2509030"
 
@@ -417,11 +626,10 @@ class Deck:
         self.course = course
         self.subject = subject
         self.logo = logo if logo is not None else find_logo("logo-full")
-        # compact crest-only mark for the footer, where the wordmark would be
-        # too small to read; falls back to the full logo if not supplied
         self.mark = find_logo("logo-mark", fallback=False) or self.logo
         self.blank = self.prs.slide_layouts[6]
-        self._sections = []
+        self._section_n = 0
+        self._content_n = 0
 
         core = self.prs.core_properties
         core.title = f"Unit {unit_no} — {unit_title}"
@@ -430,7 +638,7 @@ class Deck:
         core.comments = f"{course} · Unit {unit_no} of 5"
 
     # ---------------- infrastructure ----------------
-    def _new(self, footer=True, bg=None):
+    def _new(self, footer=True, bg=WHITE):
         s = self.prs.slides.add_slide(self.blank)
         if bg is not None:
             rect(s, 0, 0, SW, SH, fill=bg)
@@ -438,723 +646,782 @@ class Deck:
             self._footer(s)
         return s
 
+    def _slide_no(self):
+        return len(self.prs.slides._sldIdLst)
+
     def _footer(self, slide):
-        hline(slide, ML, FOOTER_Y - 0.16, CW, BORDER, 0.75)
-        right = ML + CW
-        logo_w = 0.0
-        if self.mark:
-            logo_w = place_logo(slide, self.mark, 0, FOOTER_Y - 0.08, 0.34,
-                                on_dark=False, max_w=0.55,
-                                right_edge=right) + 0.34
+        """Small captions, in the report's style, plus the logo top right."""
+        caption(slide, ML, FOOTER_Y,
+                f"{self.PRESENTER}  ·  Register No. {self.REGISTER}", w=5.0)
+        tf = textbox(slide, ML + CW - 3.0, FOOTER_Y, 3.0, 0.22)
+        para(tf, f"{self._slide_no():02d}", size=8.5, color=CRIMSON,
+             family="serif", align=PP_ALIGN.RIGHT, line=1.1, first=True)
+        if self.logo:
+            place_logo(slide, self.logo, 0, 0.40, 0.46, on_dark=False,
+                       max_w=1.25, right_edge=ML + CW)
 
-        n = len(self.prs.slides._sldIdLst) - 1  # index of the slide being built
-        credit = f"{self.PRESENTER}  ·  {self.REGISTER}"
-        block_w = 2.9
-        x = right - logo_w - block_w
-        tf2 = textbox(slide, x, FOOTER_Y, block_w, 0.24)
-        rich(tf2, [(credit, {'color': MUTED}),
-                   ("     ", {}),
-                   (f"{n + 1:02d}", {'bold': True, 'color': NAVY})],
-             size=9, align=PP_ALIGN.RIGHT, first=True)
+    def _head(self, slide, kicker, title, sub=None, accent=CRIMSON,
+              numbered=True):
+        """Report-style header: number badge, eyebrow, serif title, rule."""
+        y = 0.52
+        tx = ML
+        if numbered:
+            self._content_n += 1
+            num_badge(slide, ML, y + 0.03, self._content_n, size=0.34,
+                      fill=accent, fsize=13.5, family="serif")
+            tx = ML + 0.50
 
-    def _head(self, slide, kicker, title, sub=None, accent=BLUE):
-        """Standard slide header: small label, big title, accent rule."""
-        y = 0.62
+        tw = CW - (tx - ML) - 1.55           # keep clear of the logo
         if kicker:
-            tf = textbox(slide, ML, y, CW, 0.24)
-            para(tf, kicker.upper(), size=9.5, bold=True, color=accent,
-                 spacing=1.6, first=True)
-            y += 0.33
-        tsize = 28.0
-        while tsize > 20 and fit(title, tsize, CW, bold=True) > 1:
+            eyebrow(slide, tx, y, kicker, color=MUTED, size=8.0, w=tw)
+            ty = y + 0.20
+        else:
+            ty = y + 0.02
+
+        tsize = 25.0
+        while tsize > 17 and fit(title, tsize, tw, family="serif") > 1:
             tsize -= 1.0
-        th = text_height_in(title, tsize, CW, True, 1.06)
-        tf = textbox(slide, ML, y, CW, th + 0.12)
-        para(tf, title, size=tsize, bold=True, color=NAVY, line=1.06, first=True)
-        y += th + 0.1
-        rect(slide, ML, y, 0.52, 0.045, fill=accent)
-        y += 0.045
+        th = text_height_in(title, tsize, tw, False, 1.0, "serif")
+        tf = textbox(slide, tx, ty, tw, th + 0.12)
+        para(tf, title, size=tsize, color=INK, family="serif", line=1.0,
+             first=True)
+
+        rule_y = max(ty + th + 0.14, y + 0.44)
+        hline(slide, ML, rule_y, CW, accent, 1.25)
+        body_top = rule_y + 0.30
+
         if sub:
-            sw = CW * 0.86
-            tf = textbox(slide, ML, y + 0.18, sw, 0.5)
-            para(tf, sub, size=12.5, color=MUTED, line=1.3, first=True)
-            y += 0.18 + text_height_in(sub, 12.5, sw, False, 1.3)
-        return y
+            sh = text_height_in(sub, 10.5, CW * 0.82, False, 1.3)
+            tf = textbox(slide, ML, rule_y + 0.16, CW * 0.82, sh + 0.1)
+            para(tf, sub, size=10.5, color=MUTED, line=1.3, first=True)
+            body_top = rule_y + 0.16 + sh + 0.24
+
+        vline(slide, ML, body_top - 0.04, BODY_BOTTOM - body_top + 0.04,
+              accent, 1.5)
+        return body_top
 
     def save(self, path):
         self.prs.save(path)
         return path
 
+    # ---------------- shared building blocks ----------------
+    def _panel_head(self, slide, x, y, text, w, accent=CRIMSON, size=12.5,
+                    family="serif"):
+        """Marker + heading, as used on every panel in the reference deck."""
+        marker(slide, x, y + 0.055, 0.085, accent)
+        tf = textbox(slide, x + 0.19, y - 0.03, w - 0.19,
+                     line_height_in(size, 1.1, family) + 0.1)
+        para(tf, text, size=size, color=INK, family=family, line=1.1,
+             first=True)
+        return text_height_in(text, size, w - 0.19, False, 1.1, family) + 0.1
+
+    def _band(self, slide, y, text, label=None, fill=CRIMSON, h=0.62,
+              color=None, label_color=None):
+        """Full-width callout strip, with text that adapts to the fill."""
+        if color is None:
+            color = on(fill)
+        if label_color is None:
+            # a softened version of the text colour for the small label
+            label_color = ON_CRIMSON_LT if luminance(fill) <= 0.55 else MUTED
+        rect(slide, ML, y, CW, h, fill=fill)
+        tf = textbox(slide, ML + 0.3, y, CW - 0.6, h, anchor=MSO_ANCHOR.MIDDLE)
+        parts = []
+        if label:
+            parts.append((label.upper() + "   ", {"size": 8.0,
+                                                  "color": label_color,
+                                                  "spacing": 1.3}))
+        parts.append((text, {"size": 11.5, "color": color}))
+        rich(tf, parts, first=True)
+
+    def _dot_rows(self, slide, x, y, w, rows, accent=CRIMSON, avail=None,
+                  size=11.0, gap=0.0, boxed=False):
+        """Bulleted rows with small crimson dots (optionally in pill boxes)."""
+        n = max(len(rows), 1)
+        rowh = (avail / n) if avail else 0.34
+        psize = min([autosize(r, w - 0.30, rowh - 0.06, size, False, 1.25,
+                              min_size=8.5) for r in rows] or [size])
+        for r in rows:
+            if boxed:
+                rect(slide, x, y + 0.01, w, rowh - 0.08, fill=WHITE,
+                     line=BORDER)
+            circle(slide, x + (0.20 if boxed else 0.055),
+                   y + (rowh - 0.08) / 2 if boxed else y + 0.13, 0.075, accent)
+            tfp = textbox(slide, x + (0.36 if boxed else 0.22),
+                          y + (rowh - 0.08) / 2 - line_height_in(psize, 1.25) / 2
+                          if boxed else y - 0.005,
+                          w - (0.52 if boxed else 0.30), rowh)
+            para(tfp, r, size=psize, color=INK, line=1.25, first=True)
+            y += rowh + gap
+        return y
+
     # ================= LAYOUTS =================
 
     def title_slide(self, title, subtitle, meta_lines=None, chips=None):
-        s = self._new(footer=False)
-        gradient_bg(s, NAVY, NAVY_DEEP, 315.0)
-        # decorative geometry
-        ghost(s, 9.5, -1.6, 5.6, 5.6, "3B7AF7", 9000)
-        ghost(s, 11.0, 3.4, 4.2, 4.2, "00B3A4", 7000)
-        ghost(s, 8.0, 1.1, 3.0, 3.0, "FFFFFF", 3500)
-        rect(s, 0, 0, 0.16, SH, fill=BLUE)
-
+        s = self._new(footer=False, bg=None)
+        gradient_bg(s, CRIMSON, CRIMSON_DK, 315.0)
+        ghost(s, 9.2, -1.9, 6.4, 6.4, "FFFFFF", 3200)
+        ghost(s, 11.4, 3.6, 4.6, 4.6, "FFFFFF", 2200)
+        ghost(s, -1.5, 4.4, 4.8, 4.8, "000000", 2600)
         if self.logo:
-            place_logo(s, self.logo, 0, 0.72, 1.0, on_dark=True, max_w=2.5,
-                       right_edge=ML + CW - 0.1)
+            place_logo(s, self.logo, 0, 0.62, 0.82, on_dark=True, max_w=2.3,
+                       right_edge=ML + CW - 0.06)
 
-        tw = 8.1
-        tsize = 44.0
-        while tsize > 32 and fit(title, tsize, tw, bold=True) > 2:
+        x = ML + 0.32
+        # eyebrow chip naming the subject
+        chip(s, x, 1.66, self.subject, fill=ACCENT_ON_PRIMARY, size=8.5,
+             h=0.32, pad=0.44)
+
+        tw = 9.35
+        tsize = 40.0
+        while tsize > 28 and fit(title, tsize, tw, family="serif") > 2:
             tsize -= 2.0
-        thh = text_height_in(title, tsize, tw, True, 1.04)
+        th = text_height_in(title, tsize, tw, False, 1.02, "serif")
 
-        # Vertical rhythm: the title/rule/subtitle/chips group is centred in the
-        # band between the logo and the presenter block, so short and long
-        # titles both sit comfortably.
-        sw = 7.4
-        ssize = autosize(subtitle, sw, 1.15, 15, False, 1.35, min_size=12)
-        subh = text_height_in(subtitle, ssize, sw, False, 1.35)
-        RULE_GAP, SUB_GAP, CHIP_GAP, CHIP_H = 0.22, 0.34, 0.44, 0.36
-        band_top, band_bottom = 2.10, 5.98
-        group = thh + RULE_GAP + SUB_GAP + subh + (CHIP_GAP + CHIP_H if chips else 0)
-        ty = band_top + max(0.0, (band_bottom - band_top - group) / 2)
+        sw = 8.7
+        ssize = autosize(subtitle, sw, 1.25, 13.5, False, 1.4, min_size=11)
+        subh = text_height_in(subtitle, ssize, sw, False, 1.4)
 
-        tf = textbox(s, ML + 0.24, ty, tw, thh + 0.2)
-        para(tf, title, size=tsize, bold=True, color=WHITE, line=1.04, first=True)
+        chips_h = 0.32 if chips else 0.0
+        group = th + 0.28 + subh + (0.40 + chips_h if chips else 0.0)
+        top = 2.30 + max(0.0, (5.45 - 2.30 - group) / 2)
 
-        y = ty + thh + RULE_GAP
-        rect(s, ML + 0.24, y, 0.72, 0.05, fill=TEAL)
-        tf = textbox(s, ML + 0.24, y + SUB_GAP, sw, subh + 0.14)
-        para(tf, subtitle, size=ssize, color=RGBColor(0xC5, 0xD2, 0xE8), line=1.35,
+        tf = textbox(s, x, top, tw, th + 0.16)
+        para(tf, title, size=tsize, color=WHITE, family="serif", line=1.02,
              first=True)
 
-        sub_bottom = y + SUB_GAP + subh
+        sy = top + th + 0.28
+        tf = textbox(s, x, sy, sw, subh + 0.14)
+        para(tf, subtitle, size=ssize, color=ON_CRIMSON, line=1.4, first=True)
+
         if chips:
-            cx = ML + 0.24
-            chip_y = sub_bottom + CHIP_GAP
-            for i, c in enumerate(chips):
-                w = chip_width(c, 9.5, True, 0.0, 0.42)
-                ch = rect(s, cx, chip_y, w, CHIP_H, fill=None, line=NAVY_SOFT,
-                          lw=1.0,
-                          shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.5)
-                ch.line.color.rgb = RGBColor(0x33, 0x4B, 0x78)
-                t = ch.text_frame
-                t.vertical_anchor = MSO_ANCHOR.MIDDLE
-                para(t, c, size=9.5, bold=True, color=RGBColor(0x9F, 0xB4, 0xD8),
-                     align=PP_ALIGN.CENTER, first=True)
-                cx += w + 0.14
+            cx = x
+            cy = sy + subh + 0.40
+            for c in chips:
+                w = chip(s, cx, cy, c, fill=None, color=ON_CRIMSON_LT,
+                         size=8.0, h=chips_h, pad=0.40, line=ACCENT_ON_PRIMARY)
+                cx += w + 0.13
 
-        # presenter block, always shown
-        hline(s, ML + 0.24, 6.14, 4.2, RGBColor(0x2A, 0x3E, 0x66), 1.0)
-        tf = textbox(s, ML + 0.24, 6.34, 5.4, 0.7)
-        para(tf, "PRESENTED BY", size=8.5, bold=True, color=TEAL, spacing=1.6,
-             first=True)
-        rich(tf, [(self.PRESENTER, {'bold': True, 'color': WHITE, 'size': 13}),
-                  ("      Register No. ", {'color': RGBColor(0x7E, 0x91, 0xB4),
-                                           'size': 10.5}),
-                  (self.REGISTER, {'bold': True,
-                                   'color': RGBColor(0xC5, 0xD2, 0xE8),
-                                   'size': 10.5})],
-             space_before=4)
-        if meta_lines:
-            tf2 = textbox(s, ML + CW - 4.7, 6.42, 4.6, 0.7)
-            for i, m in enumerate(meta_lines):
-                para(tf2, m, size=10, bold=(i == 0),
-                     color=RGBColor(0xC5, 0xD2, 0xE8) if i == 0
-                     else RGBColor(0x7E, 0x91, 0xB4),
-                     line=1.34, align=PP_ALIGN.RIGHT, first=(i == 0))
+        # presenter panels, in the reference deck's bottom-box style
+        boxes = [("Presented by", self.PRESENTER),
+                 ("Register No.", self.REGISTER)]
+        for m in (meta_lines or []):
+            boxes.append(("Course", m))
+        bx, by, bh = x, 5.88, 0.72
+        for label, value in boxes:
+            vw = max(text_width_in(value, 14, False, "serif"),
+                     text_width_in(label, 8, False, "sans")) + 0.42
+            vw = max(vw, 1.9)
+            vline(s, bx, by, bh, ACCENT_ON_PRIMARY, 1.6)
+            tf = textbox(s, bx + 0.20, by + 0.06, vw, 0.2)
+            para(tf, label.upper(), size=8.0, color=ON_CRIMSON_LT, spacing=1.3,
+                 line=1.0, first=True)
+            tf = textbox(s, bx + 0.20, by + 0.30, vw, 0.34)
+            para(tf, value, size=14, color=WHITE, family="serif", line=1.0,
+                 first=True)
+            bx += vw + 0.34
         return s
 
     def agenda_slide(self, items, title="What we will cover",
                      kicker="Agenda", note=None):
         s = self._new()
-        self._head(s, kicker, title, note)
+        top = self._head(s, kicker, title, note)
         n = len(items)
-        col = 2 if n > 4 else 1
-        rows = (n + col - 1) // col
-        gap = 0.26
-        cw = (CW - gap) / col if col == 2 else CW * 0.78
-        top = 2.18 if not note else 2.42
-        ch = min(0.86, (BODY_BOTTOM - top - (rows - 1) * 0.16) / rows)
+        cols = 2 if n > 4 else 1
+        rows = (n + cols - 1) // cols
+        gap = 0.32
+        cw = (BODY_W - gap) / cols if cols == 2 else BODY_W * 0.8
+        avail = BODY_BOTTOM - top
+        ch = min(0.92, avail / rows)
+        y0 = top + max(0.0, (avail - ch * rows) / 2)
         for i, it in enumerate(items):
             head, desc = (it if isinstance(it, tuple) else (it, None))
-            r, c = i % rows, i // rows
-            x = ML + c * (cw + gap)
-            y = top + r * (ch + 0.16)
-            accent = ACCENTS[i % len(ACCENTS)]
-            rect(s, x, y, 0.035, ch, fill=accent)
-            tfn = textbox(s, x + 0.22, y + 0.02, 0.62, ch)
-            para(tfn, f"{i + 1:02d}", size=21, bold=True, color=accent, first=True)
-            iw = cw - 1.0
-            hsize = autosize(head, iw, ch * (0.5 if desc else 1.0), 14.5, True,
-                             1.14, min_size=12)
-            hh = text_height_in(head, hsize, iw, True, 1.14)
-            tf = textbox(s, x + 0.86, y + (0.06 if desc else 0.14), iw, ch)
-            para(tf, head, size=hsize, bold=True, color=NAVY, line=1.14, first=True)
+            r, c = (i % rows, i // rows) if cols == 2 else (i, 0)
+            x = BODY_X + c * (cw + gap)
+            y = y0 + r * ch
+            num_badge(s, x, y + 0.04, f"{i + 1:02d}", size=0.34, fill=CRIMSON,
+                      fsize=11.5, family="serif")
+            iw = cw - 0.52
+            hsize = autosize(head, iw, ch * (0.46 if desc else 0.9), 12.5, True,
+                             1.2, min_size=10.5)
+            hh = text_height_in(head, hsize, iw, True, 1.2)
+            tf = textbox(s, x + 0.52, y, iw, ch - 0.06)
+            para(tf, head, size=hsize, bold=True, color=INK, line=1.2,
+                 first=True)
             if desc:
-                dsize = autosize(desc, iw, ch - hh - 0.14, 11, False, 1.22,
-                                 min_size=9)
-                para(tf, desc, size=dsize, color=MUTED, line=1.22, space_before=3)
+                dsize = autosize(desc, iw, ch - hh - 0.16, 9.5, False, 1.28,
+                                 min_size=8.0)
+                para(tf, desc, size=dsize, color=MUTED, line=1.28,
+                     space_before=2)
         return s
 
-    def section_slide(self, number, title, blurb=None, accent=BLUE):
-        s = self._new(footer=False)
-        gradient_bg(s, NAVY, NAVY_DEEP, 315.0)
-        ghost(s, 10.2, 1.0, 4.6, 4.6, "3B7AF7", 8000)
-        ghost(s, 12.0, 4.4, 3.0, 3.0, "00B3A4", 6000)
-        rect(s, 0, 0, 0.16, SH, fill=accent)
-        tf = textbox(s, ML + 0.3, 2.62, 1.9, 1.0)
-        para(tf, f"{number:02d}", size=64, bold=True, color=accent, line=0.92,
-             first=True)
-        rect(s, ML + 0.3, 3.66, 0.66, 0.05, fill=WHITE)
-        tw = 8.4
-        tsize = autosize(title, tw, 1.7, 34, True, 1.08, min_size=26)
-        th = text_height_in(title, tsize, tw, True, 1.08)
-        tf = textbox(s, ML + 2.5, 2.72, tw, th + 0.16)
-        para(tf, title, size=tsize, bold=True, color=WHITE, line=1.08, first=True)
-        if blurb:
-            tf = textbox(s, ML + 2.5, 2.72 + th + 0.24, 7.6, 0.9)
-            para(tf, blurb, size=13.5, color=RGBColor(0xAF, 0xC1, 0xDE), line=1.34,
-                 first=True)
+    def section_slide(self, number, title, blurb=None, accent=CRIMSON):
+        s = self._new(footer=False, bg=None)
+        gradient_bg(s, DARK1, DARK2, 315.0)
+        ghost(s, 9.6, -1.4, 5.8, 5.8, "FFFFFF", 2400)
+        ghost(s, 11.6, 4.0, 3.8, 3.8, GHOST_HEX, 9000)
         if self.logo:
-            place_logo(s, self.logo, 0, 0.72, 0.82, on_dark=True, max_w=2.1,
-                       right_edge=ML + CW - 0.1)
+            place_logo(s, self.logo, 0, 0.62, 0.78, on_dark=True, max_w=2.2,
+                       right_edge=ML + CW - 0.06)
+        x = ML + 0.32
+        # oversized faint section numeral fills the right of the divider
+        tf = textbox(s, 7.9, 1.28, 4.9, 4.4)
+        para(tf, f"{number:02d}", size=190, color=DARK_NUMERAL,
+             family="serif", align=PP_ALIGN.RIGHT, line=1.0, first=True)
+
+        tw = 8.0
+        tsize = autosize(title, tw, 2.0, 34, False, 1.04, min_size=24,
+                         family="serif")
+        th = text_height_in(title, tsize, tw, False, 1.04, "serif")
+        bh = text_height_in(blurb, 12.5, 7.4, False, 1.38) if blurb else 0.0
+        group = 0.30 + 0.34 + th + 0.24 + (0.30 + bh if blurb else 0.0)
+        top = 2.05 + max(0.0, (6.00 - 2.05 - group) / 2)
+
+        chip(s, x, top, f"Section {number:02d}", fill=CRIMSON, color=WHITE,
+             size=8.5, h=0.30, pad=0.44)
+        ty = top + 0.30 + 0.34
+        tf = textbox(s, x, ty, tw, th + 0.16)
+        para(tf, title, size=tsize, color=WHITE, family="serif", line=1.04,
+             first=True)
+        y = ty + th + 0.24
+        hline(s, x, y, 0.86, CRIMSON, 1.6)
+        if blurb:
+            tf = textbox(s, x, y + 0.30, 7.4, bh + 0.12)
+            para(tf, blurb, size=12.5, color=ON_DARK, line=1.38, first=True)
+        caption(s, x, FOOTER_Y,
+                f"{self.PRESENTER}  ·  Register No. {self.REGISTER}", w=5.0,
+                color=DARK_CAPTION)
         return s
 
     def bullets_slide(self, kicker, title, bullets, sub=None, lead=None,
-                      accent=BLUE, two_col=False):
+                      accent=CRIMSON, two_col=False):
         s = self._new()
         y = self._head(s, kicker, title, sub, accent)
-        y += 0.34
         if lead:
-            p = card(s, ML, y, CW, 0.72, fill=ACCENT_TINTS[str(accent)], line=None,
-                     shadow=False)
-            rect(s, ML, y, 0.035, 0.72, fill=accent)
-            tf = p.text_frame
-            tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-            tf.margin_left = Inches(0.28)
-            tf.margin_right = Inches(0.24)
-            lsize = autosize(lead, CW - 0.6, 0.58, 13, True, 1.25, min_size=10.5)
-            para(tf, lead, size=lsize, bold=True, color=NAVY, line=1.25, first=True)
-            y += 0.72 + 0.34
+            lsize = autosize(lead, BODY_W - 0.7, 0.44, 11.5, False, 1.25,
+                             min_size=9.5)
+            rect(s, BODY_X, y, BODY_W, 0.62, fill=accent)
+            tf = textbox(s, BODY_X + 0.28, y, BODY_W - 0.56, 0.62,
+                         anchor=MSO_ANCHOR.MIDDLE)
+            para(tf, lead, size=lsize, color=on(accent), line=1.25, first=True)
+            y += 0.62 + 0.30
 
         cols = 2 if two_col else 1
         rows = (len(bullets) + cols - 1) // cols
-        gap = 0.5
-        cw = (CW - gap) / cols if cols == 2 else CW * 0.94
+        gap = 0.50
+        cw = (BODY_W - gap) / cols if cols == 2 else BODY_W * 0.94
         avail = BODY_BOTTOM - y
-        rh = min(0.94, avail / max(rows, 1))
+        rh = min(0.96, avail / max(rows, 1))
         y += max(0.0, (avail - rh * rows) / 2)
         for i, b in enumerate(bullets):
             head, desc = (b if isinstance(b, tuple) else (b, None))
             r, c = (i % rows, i // rows) if cols == 2 else (i, 0)
-            x = ML + c * (cw + gap)
+            x = BODY_X + c * (cw + gap)
             yy = y + r * rh
-            rect(s, x + 0.02, yy + 0.145, 0.13, 0.13, fill=accent,
-                 shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.3)
-            iw = cw - 0.5
+            circle(s, x + 0.06, yy + 0.13, 0.085, accent)
+            iw = cw - 0.34
             budget = rh - 0.14
-            hsize = autosize(head, iw, budget * (0.5 if desc else 1.0), 14,
-                             bool(desc), 1.2, min_size=11)
-            hh = text_height_in(head, hsize, iw, bool(desc), 1.2)
-            tf = textbox(s, x + 0.4, yy + 0.04, iw, budget)
-            para(tf, head, size=hsize, bold=bool(desc), color=NAVY if desc else INK,
-                 line=1.2, first=True)
+            hsize = autosize(head, iw, budget * (0.48 if desc else 1.0), 12,
+                             bool(desc), 1.22, min_size=10)
+            hh = text_height_in(head, hsize, iw, bool(desc), 1.22)
+            tf = textbox(s, x + 0.24, yy, iw, budget)
+            para(tf, head, size=hsize, bold=bool(desc), color=INK, line=1.22,
+                 first=True)
             if desc:
-                dsize = autosize(desc, iw, budget - hh - 0.06, 11.5, False, 1.26,
-                                 min_size=9)
-                para(tf, desc, size=dsize, color=MUTED, line=1.26, space_before=3)
+                dsize = autosize(desc, iw, budget - hh - 0.06, 9.5, False, 1.3,
+                                 min_size=8.0)
+                para(tf, desc, size=dsize, color=MUTED, line=1.3,
+                     space_before=2)
         return s
 
     def cards_slide(self, kicker, title, cards_data, sub=None, cols=None,
-                    accent=BLUE, numbered=False, tinted=False):
-        """cards_data = [(heading, body), ...] or [(heading, body, accent), ...]"""
+                    accent=CRIMSON, numbered=False, tinted=False):
         s = self._new()
-        y = self._head(s, kicker, title, sub, accent) + 0.36
+        y = self._head(s, kicker, title, sub, accent)
         n = len(cards_data)
         cols = cols or (3 if n % 3 == 0 or n > 4 else (2 if n <= 4 else 3))
         rows = (n + cols - 1) // cols
-        gx, gy = 0.28, 0.26
-        cw = (CW - gx * (cols - 1)) / cols
-        ch = (BODY_BOTTOM - y - gy * (rows - 1)) / rows
-        # shrink cards to the height their content actually needs
-        pad0 = 0.3
-        iw0 = cw - pad0 * 2
+        gx, gy = 0.26, 0.24
+        cw = (BODY_W - gx * (cols - 1)) / cols
+        avail = BODY_BOTTOM - y
+        ch = (avail - gy * (rows - 1)) / rows
+        pad = 0.26
+        iw0 = cw - pad * 2
         need = max(
-            0.36 + (0.56 if numbered else 0.0)
-            + text_height_in(c[0], 14.5, iw0, True, 1.14) + 0.16
-            + text_height_in(c[1], 11.5, iw0, False, 1.32) + 0.34
+            0.30 + (0.46 if numbered else 0.0)
+            + text_height_in(c[0], 12.5, iw0 - 0.19, False, 1.15, "serif")
+            + 0.14
+            + text_height_in(c[1], 9.8, iw0, False, 1.34) + 0.30
             for c in cards_data)
-        ch = min(ch, max(need, 2.25 if rows == 1 else 1.5))
-        y += max(0.0, (BODY_BOTTOM - y - (ch * rows + gy * (rows - 1))) / 2)
+        ch = min(ch, max(need, 2.85 if rows == 1 else 1.62))
+        # centre the grid, but stay near the header rather than drifting low
+        y += min(0.45, max(0.0, (avail - (ch * rows + gy * (rows - 1))) / 2))
+
         for i, c in enumerate(cards_data):
             head, body = c[0], c[1]
-            acc = c[2] if len(c) > 2 else ACCENTS[i % 3] if tinted else accent
+            acc = c[2] if len(c) > 2 else accent
             r, cc = i // cols, i % cols
-            x = ML + cc * (cw + gx)
+            x = BODY_X + cc * (cw + gx)
             yy = y + r * (ch + gy)
-            bg = ACCENT_TINTS[str(acc)] if tinted else WHITE
-            card(s, x, yy, cw, ch, fill=bg, line=None if tinted else BORDER,
-                 shadow=not tinted)
-            rect(s, x + 0.001, yy + 0.001, cw * 0.999, 0.07, fill=acc)
-            pad = 0.3
-            contenth = ((0.56 if numbered else 0.0)
-                        + text_height_in(head, 14.5, cw - pad * 2, True, 1.14)
-                        + 0.16
-                        + text_height_in(body, 11.5, cw - pad * 2, False, 1.32))
-            ty = yy + max(0.36, (ch - contenth) / 2 + 0.03)
+            if tinted:
+                rect(s, x, yy, cw, ch, fill=acc)
+                hcol = on(acc)
+                bcol = ON_CRIMSON if hcol == WHITE else MUTED
+            else:
+                card(s, x, yy, cw, ch, fill=PANEL, line=BORDER)
+                vline(s, x, yy, ch, acc, 1.6)
+                hcol, bcol = INK, MUTED
+
+            contenth = ((0.46 if numbered else 0.0)
+                        + text_height_in(head, 12.5, iw0 - 0.19, False, 1.15,
+                                         "serif") + 0.14
+                        + text_height_in(body, 9.8, iw0, False, 1.34))
+            ty = yy + max(0.28, (ch - contenth) / 2)
             if numbered:
-                circle(s, x + pad + 0.19, ty + 0.19, 0.38, fill=acc)
-                tfn = textbox(s, x + pad, ty + 0.045, 0.38, 0.3)
-                para(tfn, f"{i + 1}", size=13, bold=True, color=WHITE,
-                     align=PP_ALIGN.CENTER, first=True)
-                ty += 0.56
-            iw = cw - pad * 2
-            hsize = autosize(head, iw, 0.78, 14.5, True, 1.14, min_size=12)
-            hl = text_height_in(head, hsize, iw, True, 1.14)
-            tf = textbox(s, x + pad, ty, iw, hl + 0.1)
-            para(tf, head, size=hsize, bold=True, color=NAVY, line=1.14, first=True)
-            bh = ch - (ty - yy) - hl - 0.34
-            bsize = autosize(body, iw, bh, 11.5, False, 1.32, min_size=8.5)
-            tf = textbox(s, x + pad, ty + hl + 0.16, iw, bh)
-            para(tf, body, size=bsize, color=MUTED, line=1.32, first=True)
+                num_badge(s, x + pad, ty, i + 1, size=0.32,
+                          fill=WHITE if tinted else acc, fsize=12,
+                          family="serif", color=acc if tinted else WHITE)
+                ty += 0.46
+
+            hsize = autosize(head, iw0 - 0.19, 0.78, 12.5, False, 1.15,
+                             min_size=10.5, family="serif")
+            hh = text_height_in(head, hsize, iw0 - 0.19, False, 1.15, "serif")
+            if tinted:
+                tf = textbox(s, x + pad, ty - 0.02, iw0, hh + 0.1)
+                para(tf, head, size=hsize, color=hcol, family="serif",
+                     line=1.15, first=True)
+            else:
+                marker(s, x + pad, ty + 0.075, 0.085, acc)
+                tf = textbox(s, x + pad + 0.19, ty - 0.02, iw0 - 0.19, hh + 0.1)
+                para(tf, head, size=hsize, color=hcol, family="serif",
+                     line=1.15, first=True)
+
+            bh = ch - (ty - yy) - hh - 0.28
+            bsize = autosize(body, iw0, bh, 9.8, False, 1.34, min_size=7.5)
+            tf = textbox(s, x + pad, ty + hh + 0.14, iw0, bh)
+            para(tf, body, size=bsize, color=bcol, line=1.34, first=True)
         return s
 
     def compare_slide(self, kicker, title, left, right, sub=None,
-                      lacc=BLUE, racc=AMBER, verdict=None):
-        """left/right = dict(label=, headline=, points=[..])"""
+                      lacc=CRIMSON, racc=CHARCOAL, verdict=None):
         s = self._new()
-        y = self._head(s, kicker, title, sub, lacc) + 0.36
-        bottom = BODY_BOTTOM - (0.78 if verdict else 0)
-        gap = 0.34
-        cw = (CW - gap) / 2
-        for side, x, acc in ((left, ML, lacc), (right, ML + cw + gap, racc)):
-            h = bottom - y
-            card(s, x, y, cw, h, fill=WHITE, line=BORDER, shadow=True)
-            rect(s, x + 0.001, y + 0.001, cw * 0.999, 0.07, fill=acc)
-            pad = 0.34
-            chip = rect(s, x + pad, y + 0.34,
-                        chip_width(side['label'].upper(), 9, True, 1.2, 0.36), 0.34,
-                        fill=ACCENT_TINTS[str(acc)],
-                        shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.5)
-            t = chip.text_frame
-            t.vertical_anchor = MSO_ANCHOR.MIDDLE
-            para(t, side['label'].upper(), size=9, bold=True, color=acc,
-                 align=PP_ALIGN.CENTER, spacing=1.2, first=True)
+        y = self._head(s, kicker, title, sub, lacc)
+        bottom = BODY_BOTTOM - (0.86 if verdict else 0.0)
+        gap = 0.30
+        cw = (BODY_W - gap) / 2
+        h = bottom - y
+        for side, x, acc in ((left, BODY_X, lacc),
+                             (right, BODY_X + cw + gap, racc)):
+            card(s, x, y, cw, h, fill=WHITE, line=BORDER)
+            rect(s, x, y, cw, 0.34, fill=acc)
+            tf = textbox(s, x + 0.24, y, cw - 0.48, 0.34,
+                         anchor=MSO_ANCHOR.MIDDLE)
+            para(tf, side["label"].upper(), size=8.5, color=on(acc), spacing=1.3,
+                 line=1.0, first=True)
+            pad = 0.28
             iw = cw - pad * 2
-            hdsize = autosize(side['headline'], iw, 0.92, 15, True, 1.14,
-                              min_size=12.5)
-            hh = text_height_in(side['headline'], hdsize, iw, True, 1.14)
-            tf = textbox(s, x + pad, y + 0.86, iw, hh + 0.1)
-            para(tf, side['headline'], size=hdsize, bold=True, color=NAVY,
-                 line=1.14, first=True)
-            yy = y + 0.86 + hh + 0.22
+            hdsize = autosize(side["headline"], iw, 0.92, 14, False, 1.12,
+                              min_size=11.5, family="serif")
+            hh = text_height_in(side["headline"], hdsize, iw, False, 1.12,
+                                "serif")
+            tf = textbox(s, x + pad, y + 0.52, iw, hh + 0.1)
+            para(tf, side["headline"], size=hdsize, color=INK, family="serif",
+                 line=1.12, first=True)
+            yy = y + 0.52 + hh + 0.20
             hline(s, x + pad, yy, iw, BORDER, 0.75)
-            yy += 0.24
-            npts = max(len(side['points']), 1)
-            rowh = min(0.66, (y + h - 0.26 - yy) / npts)
-            pw = iw - 0.32
-            psize = min([autosize(p, pw, rowh - 0.08, 12, False, 1.25, min_size=9.5)
-                         for p in side['points']] or [12])
-            for pnt in side['points']:
-                rect(s, x + pad, yy + 0.115, 0.11, 0.11, fill=acc,
-                     shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.3)
-                tfp = textbox(s, x + pad + 0.32, yy, pw, rowh)
-                para(tfp, pnt, size=psize, color=INK, line=1.25, first=True)
-                yy += rowh
+            self._dot_rows(s, x + pad, yy + 0.20, iw, side["points"], acc,
+                           avail=(y + h - 0.22) - (yy + 0.20), size=10.5)
         if verdict:
-            vy = BODY_BOTTOM - 0.62
-            b = card(s, ML, vy, CW, 0.62, fill=NAVY, line=None, shadow=False)
-            tf = b.text_frame
-            tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-            tf.margin_left = Inches(0.3)
-            rich(tf, [("In short   ", {'bold': True, 'color': TEAL, 'size': 10,
-                                      'spacing': 1.4, 'caps': True}),
-                      (verdict, {'color': WHITE, 'size': 12.5, 'bold': True})],
-                 first=True)
+            self._band(s, BODY_BOTTOM - 0.62, verdict, label="In short",
+                       fill=CRIMSON)
         return s
 
-    def process_slide(self, kicker, title, steps, sub=None, accent=BLUE,
+    def process_slide(self, kicker, title, steps, sub=None, accent=CRIMSON,
                       note=None):
-        """steps = [(label, desc), ...]  → horizontal numbered flow."""
         s = self._new()
         base = accent[0] if isinstance(accent, list) else accent
-        y = self._head(s, kicker, title, sub, base) + 0.5
+        y = self._head(s, kicker, title, sub, base)
         n = len(steps)
-        gx = 0.2
-        cw = (CW - gx * (n - 1)) / n
-        h = min(2.9, BODY_BOTTOM - y - (0.86 if note else 0))
-        iw0 = cw - 0.36
-        cardh = min(h - 0.78, max(
-            0.22 + text_height_in(l, 13, iw0, True, 1.14) + 0.14
-            + text_height_in(dsc, 11, iw0, False, 1.28) + 0.26
-            for l, dsc in steps))
-        cy = y + 0.42 + max(0.0, (h - (0.78 + cardh)) / 2)
-        hline(s, ML + cw * 0.5, cy - 0.012, CW - cw, BORDER, 2.0)
+        gx = 0.20
+        cw = (BODY_W - gx * (n - 1)) / n
+        h = (BODY_BOTTOM - y) - (0.90 if note else 0.0)
+        iw0 = cw - 0.34
+        cardh = min(h - 0.72, max(
+            0.22 + text_height_in(l, 11.5, iw0, True, 1.18) + 0.12
+            + text_height_in(d, 9.5, iw0, False, 1.32) + 0.24
+            for l, d in steps))
+        cy = y + 0.34 + min(0.5, max(0.0, (h - (0.72 + cardh)) / 2))
+        hline(s, BODY_X + cw * 0.5, cy - 0.008, BODY_W - cw, BORDER, 1.5)
         for i, (label, desc) in enumerate(steps):
-            x = ML + i * (cw + gx)
-            acc = accent if not isinstance(accent, list) else accent[i % len(accent)]
-            circle(s, x + cw / 2, cy, 0.52, fill=acc)
-            tfn = textbox(s, x, cy - 0.145, cw, 0.3)
-            para(tfn, f"{i + 1}", size=15, bold=True, color=WHITE,
-                 align=PP_ALIGN.CENTER, first=True)
-            card(s, x, cy + 0.44, cw, cardh, fill=PAPER, line=BORDER, shadow=False)
-            iw = cw - 0.36
-            lsize = autosize(label, iw, 0.62, 13, True, 1.14, min_size=10.5)
-            lh = text_height_in(label, lsize, iw, True, 1.14)
-            tf = textbox(s, x + 0.18, cy + 0.66, iw, lh + 0.1)
-            para(tf, label, size=lsize, bold=True, color=NAVY,
-                 align=PP_ALIGN.CENTER, line=1.14, first=True)
-            dh = cardh - lh - 0.52
-            dsize = autosize(desc, iw, dh, 11, False, 1.28, min_size=8.5)
-            tf = textbox(s, x + 0.18, cy + 0.66 + lh + 0.14, iw, dh)
+            x = BODY_X + i * (cw + gx)
+            acc = accent[i % len(accent)] if isinstance(accent, list) else accent
+            num_badge(s, x + cw / 2 - 0.19, cy - 0.19, i + 1, size=0.38,
+                      fill=acc, fsize=13, family="serif",
+                      color=on(acc))
+            card(s, x, cy + 0.38, cw, cardh, fill=PANEL, line=BORDER)
+            hline(s, x, cy + 0.38, cw, acc, 1.4)
+            lsize = autosize(label, iw0, 0.6, 11.5, True, 1.18, min_size=9.5)
+            lh = text_height_in(label, lsize, iw0, True, 1.18)
+            tf = textbox(s, x + 0.17, cy + 0.58, iw0, lh + 0.08)
+            para(tf, label, size=lsize, bold=True, color=INK,
+                 align=PP_ALIGN.CENTER, line=1.18, first=True)
+            dh = cardh - lh - 0.36
+            dsize = autosize(desc, iw0, dh, 9.5, False, 1.32, min_size=7.5)
+            tf = textbox(s, x + 0.17, cy + 0.58 + lh + 0.12, iw0, dh)
             para(tf, desc, size=dsize, color=MUTED, align=PP_ALIGN.CENTER,
-                 line=1.28, first=True)
+                 line=1.32, first=True)
         if note:
-            ny = BODY_BOTTOM - 0.66
-            b = card(s, ML, ny, CW, 0.66, fill=ACCENT_TINTS[str(base)],
-                     line=None, shadow=False)
-            rect(s, ML, ny, 0.035, 0.66, fill=base)
-            tf = b.text_frame
-            tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-            tf.margin_left = Inches(0.3)
-            tf.margin_right = Inches(0.24)
-            para(tf, note, size=12, bold=True, color=NAVY, first=True)
+            self._band(s, BODY_BOTTOM - 0.62, note, fill=base)
         return s
 
-    def steps_slide(self, kicker, title, levels, sub=None, accent=BLUE):
-        """Vertical staircase — good for maturity levels."""
+    def steps_slide(self, kicker, title, levels, sub=None, accent=CRIMSON):
         s = self._new()
-        y = self._head(s, kicker, title, sub, accent) + 0.36
+        y = self._head(s, kicker, title, sub, accent)
         n = len(levels)
         gap = 0.14
-        h = (BODY_BOTTOM - y - gap * (n - 1)) / n
-        h = min(h, 1.05)
-        step = (CW * 0.30) / max(n - 1, 1)
+        avail = BODY_BOTTOM - y
+        h = min(1.02, (avail - gap * (n - 1)) / n)
+        y += max(0.0, (avail - (h * n + gap * (n - 1))) / 2)
+        step = (BODY_W * 0.26) / max(n - 1, 1)
         for i, lv in enumerate(levels):
             label, desc = lv[0], lv[1]
-            acc = lv[2] if len(lv) > 2 else ACCENTS[i % len(ACCENTS)]
-            x = ML + i * step
-            w = CW - i * step
+            acc = lv[2] if len(lv) > 2 else (CRIMSON if i % 2 == 0 else CHARCOAL)
+            x = BODY_X + i * step
+            w = BODY_W - i * step
             yy = y + (n - 1 - i) * (h + gap)
-            card(s, x, yy, w, h, fill=WHITE, line=BORDER, shadow=True)
-            rect(s, x, yy, 0.05, h, fill=acc)
-            circle(s, x + 0.48, yy + h / 2, 0.44, fill=ACCENT_TINTS[str(acc)])
-            tfn = textbox(s, x + 0.26, yy + h / 2 - 0.115, 0.44, 0.26)
-            para(tfn, f"L{i + 1}", size=11.5, bold=True, color=acc,
-                 align=PP_ALIGN.CENTER, first=True)
-            lw2 = min(3.1, w - 1.1)
-            lsize = autosize(label, lw2, h - 0.34, 13.5, True, 1.14, min_size=11)
-            lh = text_height_in(label, lsize, lw2, True, 1.14)
-            tf = textbox(s, x + 0.9, yy + max(0.14, (h - lh) / 2), lw2, lh + 0.1)
-            para(tf, label, size=lsize, bold=True, color=NAVY, line=1.14, first=True)
-            dw = w - 1.1 - lw2 - 0.4
-            dsize = autosize(desc, dw, h - 0.34, 11.5, False, 1.26, min_size=9.5)
-            dh = text_height_in(desc, dsize, dw, False, 1.26)
-            tf = textbox(s, x + 0.9 + lw2 + 0.2, yy + max(0.14, (h - dh) / 2),
-                         dw, dh + 0.1)
-            para(tf, desc, size=dsize, color=MUTED, line=1.26, first=True)
-        return s
-
-    def stats_slide(self, kicker, title, stats, sub=None, accent=BLUE, note=None):
-        """stats = [(big, label, desc), ...]"""
-        s = self._new()
-        y = self._head(s, kicker, title, sub, accent) + 0.44
-        n = len(stats)
-        gx = 0.28
-        cw = (CW - gx * (n - 1)) / n
-        h = min(2.6, BODY_BOTTOM - y - (0.9 if note else 0))
-        for i, (big, label, desc) in enumerate(stats):
-            x = ML + i * (cw + gx)
-            acc = ACCENTS[i % 3]
-            card(s, x, y, cw, h, fill=WHITE, line=BORDER, shadow=True)
-            bigsize = autosize(big, cw - 0.52, 0.84, 38, True, 1.0, min_size=17)
-            bigh = text_height_in(big, bigsize, cw - 0.52, True, 1.0)
-            tf = textbox(s, x + 0.26, y + 0.3 + max(0, 0.84 - bigh) / 2,
-                         cw - 0.52, bigh + 0.1)
-            para(tf, big, size=bigsize, bold=True, color=acc, line=1.0, first=True)
-            rect(s, x + 0.26, y + 1.16, 0.42, 0.045, fill=acc)
-            iw = cw - 0.52
-            lsize = autosize(label, iw, 0.6, 13, True, 1.14, min_size=11)
-            lh = text_height_in(label, lsize, iw, True, 1.14)
-            tf = textbox(s, x + 0.26, y + 1.36, iw, lh + 0.08)
-            para(tf, label, size=lsize, bold=True, color=NAVY, line=1.14, first=True)
-            dh = h - 1.36 - lh - 0.3
-            dsize = autosize(desc, iw, dh, 11, False, 1.3, min_size=8.5)
-            tf = textbox(s, x + 0.26, y + 1.36 + lh + 0.12, iw, dh)
+            card(s, x, yy, w, h, fill=PANEL, line=BORDER)
+            vline(s, x, yy, h, acc, 1.6)
+            num_badge(s, x + 0.22, yy + h / 2 - 0.16, f"L{i + 1}", size=0.32,
+                      fill=acc, fsize=10, family="sans",
+                      color=on(acc))
+            lw2 = min(3.0, w - 1.15)
+            lsize = autosize(label, lw2, h - 0.3, 12, True, 1.18, min_size=10)
+            lh = text_height_in(label, lsize, lw2, True, 1.18)
+            tf = textbox(s, x + 0.68, yy + max(0.12, (h - lh) / 2), lw2,
+                         lh + 0.08)
+            para(tf, label, size=lsize, bold=True, color=INK, line=1.18,
+                 first=True)
+            dw = w - 0.68 - lw2 - 0.5
+            dsize = autosize(desc, dw, h - 0.3, 10, False, 1.3, min_size=8.0)
+            dh = text_height_in(desc, dsize, dw, False, 1.3)
+            tf = textbox(s, x + 0.68 + lw2 + 0.26, yy + max(0.12, (h - dh) / 2),
+                         dw, dh + 0.08)
             para(tf, desc, size=dsize, color=MUTED, line=1.3, first=True)
-        if note:
-            ny = y + h + 0.3
-            b = card(s, ML, ny, CW, 0.62, fill=NAVY, line=None, shadow=False)
-            tf = b.text_frame
-            tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-            tf.margin_left = Inches(0.3)
-            para(tf, note, size=12.5, bold=True, color=WHITE, first=True)
         return s
 
-    def quadrant_slide(self, kicker, title, quads, sub=None, accent=BLUE):
-        """quads = [(heading, [points], accent), ...] — 2x2 grid."""
+    def stats_slide(self, kicker, title, stats, sub=None, accent=CRIMSON,
+                    note=None):
         s = self._new()
-        y = self._head(s, kicker, title, sub, accent) + 0.36
-        gx, gy = 0.28, 0.24
-        cw = (CW - gx) / 2
+        y = self._head(s, kicker, title, sub, accent)
+        n = len(stats)
+        gx = 0.26
+        cw = (BODY_W - gx * (n - 1)) / n
+        avail = (BODY_BOTTOM - y) - (0.86 if note else 0.0)
+        h = min(2.5, avail)
+        y += max(0.0, (avail - h) / 2)
+        for i, (big, label, desc) in enumerate(stats):
+            x = BODY_X + i * (cw + gx)
+            acc = CRIMSON if i % 2 == 0 else CHARCOAL
+            card(s, x, y, cw, h, fill=PANEL, line=BORDER)
+            hline(s, x, y, cw, acc, 1.6)
+            iw = cw - 0.52
+            bigsize = autosize(big, iw, 0.86, 30, False, 1.0, min_size=15,
+                               family="serif")
+            bigh = text_height_in(big, bigsize, iw, False, 1.0, "serif")
+            tf = textbox(s, x + 0.26, y + 0.34, iw, bigh + 0.1)
+            para(tf, big, size=bigsize, color=acc, family="serif", line=1.0,
+                 first=True)
+            ry = y + 0.34 + bigh + 0.18
+            hline(s, x + 0.26, ry, 0.5, acc, 1.2)
+            lsize = autosize(label, iw, 0.56, 11.5, True, 1.18, min_size=9.5)
+            lh = text_height_in(label, lsize, iw, True, 1.18)
+            tf = textbox(s, x + 0.26, ry + 0.18, iw, lh + 0.08)
+            para(tf, label, size=lsize, bold=True, color=INK, line=1.18,
+                 first=True)
+            dy = ry + 0.18 + lh + 0.10
+            dh = y + h - dy - 0.24
+            dsize = autosize(desc, iw, dh, 9.5, False, 1.32, min_size=7.5)
+            tf = textbox(s, x + 0.26, dy, iw, dh)
+            para(tf, desc, size=dsize, color=MUTED, line=1.32, first=True)
+        if note:
+            self._band(s, BODY_BOTTOM - 0.62, note, fill=CHARCOAL,
+                       label_color=DARK_LABEL)
+        return s
+
+    def quadrant_slide(self, kicker, title, quads, sub=None, accent=CRIMSON):
+        s = self._new()
+        y = self._head(s, kicker, title, sub, accent)
+        gx, gy = 0.26, 0.22
+        cw = (BODY_W - gx) / 2
         ch = (BODY_BOTTOM - y - gy) / 2
         for i, q in enumerate(quads):
             head, pts = q[0], q[1]
-            acc = q[2] if len(q) > 2 else ACCENTS[i % len(ACCENTS)]
-            x = ML + (i % 2) * (cw + gx)
+            acc = q[2] if len(q) > 2 else (CRIMSON if i % 2 == 0 else CHARCOAL)
+            x = BODY_X + (i % 2) * (cw + gx)
             yy = y + (i // 2) * (ch + gy)
-            card(s, x, yy, cw, ch, fill=WHITE, line=BORDER, shadow=True)
-            rect(s, x, yy, 0.05, ch, fill=acc)
-            tf = textbox(s, x + 0.34, yy + 0.26, cw - 0.6, 0.36)
-            para(tf, head, size=14, bold=True, color=NAVY, first=True)
-            yy2 = yy + 0.74
-            rowh = min(0.54, (yy + ch - 0.24 - yy2) / max(len(pts), 1))
-            pw = cw - 0.96
-            psize = min([autosize(p, pw, rowh - 0.06, 11.5, False, 1.24,
-                                  min_size=9) for p in pts] or [11.5])
-            for p in pts:
-                rect(s, x + 0.34, yy2 + 0.1, 0.1, 0.1, fill=acc,
-                     shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.3)
-                tfp = textbox(s, x + 0.62, yy2 - 0.01, pw, rowh)
-                para(tfp, p, size=psize, color=INK, line=1.24, first=True)
-                yy2 += rowh
+            card(s, x, yy, cw, ch, fill=PANEL, line=BORDER)
+            vline(s, x, yy, ch, acc, 1.6)
+            hh = self._panel_head(s, x + 0.28, yy + 0.22, head, cw - 0.56, acc,
+                                  size=12.5)
+            yy2 = yy + 0.22 + hh + 0.16
+            hline(s, x + 0.28, yy2 - 0.08, cw - 0.56, BORDER, 0.75)
+            self._dot_rows(s, x + 0.28, yy2 + 0.04, cw - 0.56, pts, acc,
+                           avail=(yy + ch - 0.18) - (yy2 + 0.04), size=10)
         return s
 
-    def table_slide(self, kicker, title, headers, rows, sub=None, accent=BLUE,
-                    widths=None, note=None):
+    def table_slide(self, kicker, title, headers, rows, sub=None,
+                    accent=CRIMSON, widths=None, note=None):
         s = self._new()
-        y = self._head(s, kicker, title, sub, accent) + 0.4
+        y = self._head(s, kicker, title, sub, accent)
         ncol, nrow = len(headers), len(rows) + 1
-        h = min(BODY_BOTTOM - y - (0.86 if note else 0), 0.52 + 0.62 * len(rows))
-        gt = s.shapes.add_table(nrow, ncol, _i(ML), _i(y), _i(CW), _i(h))
+        avail = (BODY_BOTTOM - y) - (0.86 if note else 0.0)
+        h = min(avail, 0.46 + 0.56 * len(rows))
+        y += max(0.0, (avail - h) / 2)
+        gt = s.shapes.add_table(nrow, ncol, _i(BODY_X), _i(y), _i(BODY_W), _i(h))
         tbl = gt.table
-        tbl.first_row = True
-        # kill banding
-        for tag in ('bandRow', 'bandCol', 'firstCol', 'lastRow', 'lastCol'):
-            tbl._tbl.tblPr.set(tag, '0')
-        tbl._tbl.tblPr.set('firstRow', '1')
+        for tag in ("bandRow", "bandCol", "firstCol", "lastRow", "lastCol"):
+            tbl._tbl.tblPr.set(tag, "0")
+        tbl._tbl.tblPr.set("firstRow", "1")
         if widths:
             total = sum(widths)
             for i, w in enumerate(widths):
-                tbl.columns[i].width = Emu(int(Inches(CW) * w / total))
+                tbl.columns[i].width = Emu(int(Inches(BODY_W) * w / total))
         colw = [tbl.columns[i].width / 914400.0 for i in range(ncol)]
-        rowh = max(0.42, (h - 0.5) / len(rows))
-        tbl.rows[0].height = Inches(0.5)
+        rowh = max(0.40, (h - 0.46) / len(rows))
+        tbl.rows[0].height = Inches(0.46)
         for r in range(1, nrow):
             tbl.rows[r].height = Inches(rowh)
-        # shrink body text until the tallest cell in every row fits its row
-        body_size = 11.0
-        while body_size > 8.5:
-            worst = 0.0
-            for row in rows:
-                for c, val in enumerate(row):
-                    worst = max(worst, text_height_in(
-                        val, body_size, max(colw[c] - 0.4, 0.5), c == 0, 1.24))
-            if worst <= rowh - 0.18:
+
+        body_size = 10.0
+        while body_size > 7.5:
+            worst = max(text_height_in(v, body_size, max(colw[c] - 0.34, 0.5),
+                                       c == 0, 1.26)
+                        for row in rows for c, v in enumerate(row))
+            if worst <= rowh - 0.16:
                 break
             body_size -= 0.5
-        head_size = 11.5
-        while head_size > 9.0 and max(
-                text_height_in(h_, head_size, max(colw[c] - 0.4, 0.5), True, 1.15)
-                for c, h_ in enumerate(headers)) > 0.32:
+        head_size = 10.0
+        while head_size > 8.0 and max(
+                text_height_in(hh, head_size, max(colw[c] - 0.34, 0.5), True,
+                               1.15)
+                for c, hh in enumerate(headers)) > 0.28:
             head_size -= 0.5
+
         for c, htxt in enumerate(headers):
             cell = tbl.cell(0, c)
             cell.fill.solid()
-            cell.fill.fore_color.rgb = NAVY
-            cell.margin_left = cell.margin_right = Inches(0.18)
-            cell.margin_top = cell.margin_bottom = Inches(0.1)
+            cell.fill.fore_color.rgb = accent
+            cell.margin_left = cell.margin_right = Inches(0.16)
+            cell.margin_top = cell.margin_bottom = Inches(0.08)
             cell.vertical_anchor = MSO_ANCHOR.MIDDLE
-            tf = cell.text_frame
-            tf.word_wrap = True
-            para(tf, htxt, size=head_size, bold=True, color=WHITE, line=1.15,
-                 first=True)
+            cell.text_frame.word_wrap = True
+            para(cell.text_frame, htxt.upper(), size=head_size,
+                 color=on(accent),
+                 spacing=1.1, line=1.15, first=True)
         for r, row in enumerate(rows, start=1):
             for c, val in enumerate(row):
                 cell = tbl.cell(r, c)
                 cell.fill.solid()
-                cell.fill.fore_color.rgb = WHITE if r % 2 else PAPER
-                cell.margin_left = cell.margin_right = Inches(0.18)
-                cell.margin_top = cell.margin_bottom = Inches(0.09)
+                cell.fill.fore_color.rgb = WHITE if r % 2 else PANEL
+                cell.margin_left = cell.margin_right = Inches(0.16)
+                cell.margin_top = cell.margin_bottom = Inches(0.08)
                 cell.vertical_anchor = MSO_ANCHOR.MIDDLE
-                tf = cell.text_frame
-                tf.word_wrap = True
-                para(tf, val, size=body_size, bold=(c == 0),
-                     color=NAVY if c == 0 else INK, line=1.24, first=True)
+                cell.text_frame.word_wrap = True
+                para(cell.text_frame, val, size=body_size, bold=(c == 0),
+                     color=INK if c == 0 else MUTED, line=1.26, first=True)
         if note:
-            ny = y + h + 0.24
-            b = card(s, ML, ny, CW, 0.62, fill=ACCENT_TINTS[str(accent)],
-                     line=None, shadow=False)
-            rect(s, ML, ny, 0.035, 0.62, fill=accent)
-            tf = b.text_frame
-            tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-            tf.margin_left = Inches(0.28)
-            para(tf, note, size=12, bold=True, color=NAVY, first=True)
+            self._band(s, BODY_BOTTOM - 0.62, note, fill=accent)
         return s
 
     def split_slide(self, kicker, title, left_head, left_points, right_cards,
-                    sub=None, accent=BLUE):
-        """Left = explanation, right = stacked mini cards."""
+                    sub=None, accent=CRIMSON):
         s = self._new()
-        y = self._head(s, kicker, title, sub, accent) + 0.36
-        lw = CW * 0.42
-        rw = CW - lw - 0.4
+        y = self._head(s, kicker, title, sub, accent)
+        lw = BODY_W * 0.40
+        rw = BODY_W - lw - 0.40
         h = BODY_BOTTOM - y
-        lhsize = autosize(left_head, lw, 1.4, 17, True, 1.14, min_size=14)
-        lhh = text_height_in(left_head, lhsize, lw, True, 1.14)
-        tf = textbox(s, ML, y + 0.04, lw, lhh + 0.14)
-        para(tf, left_head, size=lhsize, bold=True, color=NAVY, line=1.14,
+        lhsize = autosize(left_head, lw, 1.5, 16, False, 1.14, min_size=13,
+                          family="serif")
+        lhh = text_height_in(left_head, lhsize, lw, False, 1.14, "serif")
+        tf = textbox(s, BODY_X, y + 0.02, lw, lhh + 0.14)
+        para(tf, left_head, size=lhsize, color=INK, family="serif", line=1.14,
              first=True)
-        yy = y + 0.06 + lhh + 0.22
-        rect(s, ML, yy, 0.5, 0.045, fill=accent)
-        yy += 0.3
-        pw = lw - 0.32
+        yy = y + 0.04 + lhh + 0.22
+        hline(s, BODY_X, yy, 0.62, accent, 1.6)
+        yy += 0.28
+        pw = lw - 0.26
         avail = (y + h) - yy
         gapp = 0.16
-        psize = 12.0
-        while psize > 9.5 and (sum(text_height_in(p, psize, pw, False, 1.26)
-                                  for p in left_points)
+        psize = 10.5
+        while psize > 8.5 and (sum(text_height_in(p, psize, pw, False, 1.3)
+                                   for p in left_points)
                                + gapp * (len(left_points) - 1)) > avail:
             psize -= 0.5
         for p in left_points:
-            ph = text_height_in(p, psize, pw, False, 1.26)
-            rect(s, ML, yy + 0.12, 0.11, 0.11, fill=accent,
-                 shape=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.3)
-            tfp = textbox(s, ML + 0.32, yy, pw, ph + 0.08)
-            para(tfp, p, size=psize, color=INK, line=1.26, first=True)
+            ph = text_height_in(p, psize, pw, False, 1.3)
+            circle(s, BODY_X + 0.055, yy + 0.115, 0.075, accent)
+            tfp = textbox(s, BODY_X + 0.22, yy, pw, ph + 0.08)
+            para(tfp, p, size=psize, color=INK, line=1.3, first=True)
             yy += ph + gapp
-        x = ML + lw + 0.4
+
+        x = BODY_X + lw + 0.40
         n = len(right_cards)
         gy = 0.18
         ch = (h - gy * (n - 1)) / n
         for i, (hd, bd) in enumerate(right_cards):
-            acc = ACCENTS[i % len(ACCENTS)]
+            acc = CRIMSON if i % 2 == 0 else CHARCOAL
             yy2 = y + i * (ch + gy)
-            card(s, x, yy2, rw, ch, fill=WHITE, line=BORDER, shadow=True)
-            rect(s, x, yy2, 0.05, ch, fill=acc)
-            iw = rw - 0.56
-            hsize = autosize(hd, iw, 0.44, 13.5, True, 1.14, min_size=11.5)
-            hh = text_height_in(hd, hsize, iw, True, 1.14)
-            bsize = autosize(bd, iw, ch - hh - 0.46, 11.5, False, 1.28, min_size=9)
-            bh = text_height_in(bd, bsize, iw, False, 1.28)
-            top = yy2 + max(0.16, (ch - hh - bh - 0.1) / 2)
-            tf = textbox(s, x + 0.3, top, iw, hh + 0.08)
-            para(tf, hd, size=hsize, bold=True, color=NAVY, line=1.14, first=True)
-            tf = textbox(s, x + 0.3, top + hh + 0.1, iw, bh + 0.1)
-            para(tf, bd, size=bsize, color=MUTED, line=1.28, first=True)
+            card(s, x, yy2, rw, ch, fill=PANEL, line=BORDER)
+            vline(s, x, yy2, ch, acc, 1.6)
+            iw = rw - 0.54
+            hsize = autosize(hd, iw - 0.19, 0.5, 12.5, False, 1.14,
+                             min_size=10.5, family="serif")
+            hh = text_height_in(hd, hsize, iw - 0.19, False, 1.14, "serif")
+            bsize = autosize(bd, iw, ch - hh - 0.44, 9.8, False, 1.32,
+                             min_size=7.5)
+            bh = text_height_in(bd, bsize, iw, False, 1.32)
+            top = yy2 + max(0.16, (ch - hh - bh - 0.12) / 2)
+            marker(s, x + 0.28, top + 0.07, 0.085, acc)
+            tf = textbox(s, x + 0.47, top - 0.02, iw - 0.19, hh + 0.1)
+            para(tf, hd, size=hsize, color=INK, family="serif", line=1.14,
+                 first=True)
+            tf = textbox(s, x + 0.28, top + hh + 0.12, iw, bh + 0.1)
+            para(tf, bd, size=bsize, color=MUTED, line=1.32, first=True)
         return s
 
-    def quote_slide(self, statement, attribution=None, kicker=None, accent=TEAL):
-        s = self._new(footer=False)
-        gradient_bg(s, NAVY, NAVY_DEEP, 315.0)
-        ghost(s, -1.4, 4.0, 5.0, 5.0, "3B7AF7", 8000)
-        ghost(s, 10.6, -1.2, 5.0, 5.0, "00B3A4", 6000)
+    def quote_slide(self, statement, attribution=None, kicker=None,
+                    accent=CRIMSON):
+        s = self._new(footer=False, bg=None)
+        gradient_bg(s, CRIMSON, CRIMSON_DK, 315.0)
+        ghost(s, -1.8, 3.8, 5.6, 5.6, "000000", 2600)
+        ghost(s, 10.4, -1.6, 5.6, 5.6, "FFFFFF", 2600)
         if self.logo:
-            place_logo(s, self.logo, 0, 0.68, 0.7, on_dark=True, max_w=1.9,
-                       right_edge=ML + CW - 0.1)
+            place_logo(s, self.logo, 0, 0.62, 0.7, on_dark=True, max_w=2.0,
+                       right_edge=ML + CW - 0.06)
         if kicker:
-            tf = textbox(s, ML + 0.4, 1.9, CW - 0.8, 0.3)
-            para(tf, kicker.upper(), size=10, bold=True, color=accent, spacing=2.0,
-                 align=PP_ALIGN.CENTER, first=True)
-        size = 30 if len(statement) > 90 else 34
-        tf = textbox(s, 1.7, 2.5, SW - 3.4, 2.4, anchor=MSO_ANCHOR.MIDDLE)
-        para(tf, statement, size=size, bold=True, color=WHITE, line=1.18,
+            w = chip_width(kicker, 8.5, False, 1.3, 0.44)
+            chip(s, SW / 2 - w / 2, 2.30, kicker, fill=ACCENT_ON_PRIMARY,
+                 size=8.5, h=0.30, pad=0.44)
+        qw = SW - 3.4
+        qsize = autosize(statement, qw, 2.1, 30, False, 1.18, min_size=20,
+                         family="serif")
+        qh = text_height_in(statement, qsize, qw, False, 1.18, "serif")
+        tf = textbox(s, 1.7, 3.00 + (2.1 - qh) / 2, qw, qh + 0.2)
+        para(tf, statement, size=qsize, color=WHITE, family="serif", line=1.18,
              align=PP_ALIGN.CENTER, first=True)
-        rect(s, SW / 2 - 0.35, 4.98, 0.7, 0.05, fill=accent)
+        hline(s, SW / 2 - 0.42, 5.34, 0.84, ON_CRIMSON_LT, 1.4)
         if attribution:
-            tf = textbox(s, 2.2, 5.24, SW - 4.4, 0.5)
-            para(tf, attribution, size=12.5, color=RGBColor(0xA9, 0xBB, 0xDA),
-                 align=PP_ALIGN.CENTER, line=1.3, first=True)
+            tf = textbox(s, 2.3, 5.62, SW - 4.6, 0.6)
+            para(tf, attribution, size=11.5, color=ON_CRIMSON,
+                 align=PP_ALIGN.CENTER, line=1.34, first=True)
+        caption(s, ML, FOOTER_Y,
+                f"{self.PRESENTER}  ·  Register No. {self.REGISTER}", w=5.0,
+                color=ON_CRIMSON_LT)
         return s
 
     def takeaways_slide(self, points, title="Key takeaways", kicker="Recap",
-                        sub=None, accent=TEAL):
+                        sub=None, accent=CRIMSON):
         s = self._new()
-        y = self._head(s, kicker, title, sub, accent) + 0.4
+        y = self._head(s, kicker, title, sub, accent)
         n = len(points)
         cols = 2 if n > 5 else 1
         rows = (n + cols - 1) // cols
-        gx, gy = 0.3, 0.2
-        cw = (CW - gx) / 2 if cols == 2 else CW
-        h = min(1.55, (BODY_BOTTOM - y - gy * (rows - 1)) / rows)
+        gx, gy = 0.28, 0.20
+        cw = (BODY_W - gx) / 2 if cols == 2 else BODY_W
+        avail = BODY_BOTTOM - y
+        h = min(1.5, (avail - gy * (rows - 1)) / rows)
+        y += max(0.0, (avail - (h * rows + gy * (rows - 1))) / 2)
         for i, p in enumerate(points):
             head, desc = (p if isinstance(p, tuple) else (p, None))
-            if cols == 2:
-                r, c = i % rows, i // rows
-            else:
-                r, c = i, 0
-            x = ML + c * (cw + gx)
+            r, c = (i % rows, i // rows) if cols == 2 else (i, 0)
+            x = BODY_X + c * (cw + gx)
             yy = y + r * (h + gy)
-            acc = ACCENTS[i % len(ACCENTS)]
-            card(s, x, yy, cw, h, fill=WHITE, line=BORDER, shadow=True)
-            rect(s, x, yy, 0.05, h, fill=acc)
-            circle(s, x + 0.54, yy + h / 2, 0.42, fill=ACCENT_TINTS[str(acc)])
-            tfn = textbox(s, x + 0.33, yy + h / 2 - 0.115, 0.42, 0.26)
-            para(tfn, f"{i + 1}", size=12.5, bold=True, color=acc,
-                 align=PP_ALIGN.CENTER, first=True)
-            iw = cw - 1.24
-            budget = h - 0.28
-            hsize = autosize(head, iw, budget * (0.56 if desc else 1.0), 13.5,
-                             True, 1.16, min_size=11)
-            hh = text_height_in(head, hsize, iw, True, 1.16)
-            dsize = hh2 = 0
+            acc = CRIMSON if i % 2 == 0 else CHARCOAL
+            card(s, x, yy, cw, h, fill=PANEL, line=BORDER)
+            vline(s, x, yy, h, acc, 1.6)
+            num_badge(s, x + 0.26, yy + h / 2 - 0.16, i + 1, size=0.32,
+                      fill=acc, fsize=12, family="serif",
+                      color=on(acc))
+            iw = cw - 1.06
+            budget = h - 0.24
+            hsize = autosize(head, iw, budget * (0.54 if desc else 1.0), 12,
+                             True, 1.18, min_size=10)
+            hh = text_height_in(head, hsize, iw, True, 1.18)
+            dsize = dh = 0
             if desc:
-                dsize = autosize(desc, iw, budget - hh - 0.06, 11.5, False, 1.26,
-                                 min_size=9)
-                hh2 = text_height_in(desc, dsize, iw, False, 1.26) + 0.05
-            top = yy + max(0.12, (h - hh - hh2) / 2)
-            tf = textbox(s, x + 0.98, top, iw, hh + hh2 + 0.1)
-            para(tf, head, size=hsize, bold=True, color=NAVY, line=1.16, first=True)
+                dsize = autosize(desc, iw, budget - hh - 0.06, 9.8, False, 1.32,
+                                 min_size=8.0)
+                dh = text_height_in(desc, dsize, iw, False, 1.32) + 0.04
+            top = yy + max(0.12, (h - hh - dh) / 2)
+            tf = textbox(s, x + 0.74, top, iw, hh + dh + 0.1)
+            para(tf, head, size=hsize, bold=True, color=INK, line=1.18,
+                 first=True)
             if desc:
-                para(tf, desc, size=dsize, color=MUTED, line=1.26, space_before=3)
+                para(tf, desc, size=dsize, color=MUTED, line=1.32,
+                     space_before=2)
         return s
 
     def closing_slide(self, title="Thank you", subtitle=None, questions=None):
-        s = self._new(footer=False)
-        gradient_bg(s, NAVY, NAVY_DEEP, 315.0)
-        ghost(s, 9.8, -1.4, 5.4, 5.4, "3B7AF7", 9000)
-        ghost(s, 11.4, 3.8, 3.6, 3.6, "00B3A4", 7000)
-        rect(s, 0, 0, 0.16, SH, fill=TEAL)
-        tf = textbox(s, ML + 0.3, 2.78, 8.0, 1.1)
-        para(tf, title, size=46, bold=True, color=WHITE, line=1.04, first=True)
-        rect(s, ML + 0.3, 4.02, 0.72, 0.05, fill=BLUE)
-        if subtitle:
-            tf = textbox(s, ML + 0.3, 4.32, 7.2, 0.8)
-            para(tf, subtitle, size=14.5, color=RGBColor(0xB8, 0xC8, 0xE4), line=1.34,
-                 first=True)
-        if questions:
-            qw = 8.0
-            qbox = 1.32
-            tf = textbox(s, ML + 0.3, 5.16, qw, qbox)
-            para(tf, "Questions to think about", size=10, bold=True, color=TEAL,
-                 spacing=1.4, caps=True, first=True)
-            qs = 11.5
-            while qs > 9.0 and sum(
-                    text_height_in("— " + q, qs, qw, False, 1.28) + 0.07
-                    for q in questions) > qbox - 0.26:
-                qs -= 0.5
-            for q in questions:
-                para(tf, "— " + q, size=qs, color=RGBColor(0x93, 0xA6, 0xC6),
-                     line=1.28, space_before=4)
+        s = self._new(footer=False, bg=None)
+        gradient_bg(s, DARK1, DARK2, 315.0)
+        ghost(s, 9.4, -1.6, 6.0, 6.0, "FFFFFF", 2400)
+        ghost(s, 11.4, 3.8, 4.0, 4.0, GHOST_HEX, 9000)
         if self.logo:
-            place_logo(s, self.logo, 0, 0.72, 0.95, on_dark=True, max_w=2.4,
-                       right_edge=ML + CW - 0.1)
-        # presenter sign-off
-        hline(s, ML + 0.3, 6.6, 3.6, RGBColor(0x2A, 0x3E, 0x66), 1.0)
-        tf = textbox(s, ML + 0.3, 6.74, 6.4, 0.32)
-        rich(tf, [(self.PRESENTER, {'bold': True, 'color': WHITE, 'size': 11.5}),
-                  ("   ·   Register No. ", {'color': RGBColor(0x7E, 0x91, 0xB4),
-                                            'size': 10}),
-                  (self.REGISTER, {'bold': True,
-                                   'color': RGBColor(0xC5, 0xD2, 0xE8),
-                                   'size': 10})],
+            place_logo(s, self.logo, 0, 0.62, 0.8, on_dark=True, max_w=2.3,
+                       right_edge=ML + CW - 0.06)
+        x = ML + 0.32
+        chip(s, x, 1.74, "Conclusion", fill=CRIMSON, color=WHITE, size=8.5,
+             h=0.30, pad=0.44)
+        tsize = autosize(title, 8.6, 1.2, 40, False, 1.02, min_size=30,
+                         family="serif")
+        th = text_height_in(title, tsize, 8.6, False, 1.02, "serif")
+        tf = textbox(s, x, 2.22, 8.6, th + 0.16)
+        para(tf, title, size=tsize, color=WHITE, family="serif", line=1.02,
+             first=True)
+        y = 2.22 + th + 0.24
+        hline(s, x, y, 0.86, CRIMSON, 1.6)
+        if subtitle:
+            ssize = autosize(subtitle, 8.4, 0.9, 12.5, False, 1.38,
+                             min_size=10.5)
+            sh = text_height_in(subtitle, ssize, 8.4, False, 1.38)
+            tf = textbox(s, x, y + 0.28, 8.4, sh + 0.1)
+            para(tf, subtitle, size=ssize, color=ON_DARK, line=1.38, first=True)
+            y = y + 0.28 + sh
+        if questions:
+            qy = max(y + 0.36, 4.30)
+            n = len(questions)
+            gx = 0.24
+            qw = (CW - gx * (n - 1)) / n
+            qh = min(1.30, 5.98 - qy)
+            for i, q in enumerate(questions):
+                qx = ML + i * (qw + gx)
+                rect(s, qx, qy, qw, qh, fill=DARK_PANEL,
+                     line=None)
+                vline(s, qx, qy, qh, CRIMSON, 1.6)
+                iw = qw - 0.46
+                qs = autosize(q, iw, qh - 0.54, 10, False, 1.32, min_size=8.0)
+                eyebrow(s, qx + 0.24, qy + 0.20, f"Question {i + 1}",
+                        color=DARK_LABEL, size=7.5, w=iw)
+                tf = textbox(s, qx + 0.24, qy + 0.46, iw, qh - 0.62)
+                para(tf, q, size=qs, color=DARK_TEXT,
+                     line=1.32, first=True)
+        # presenter sign-off bar
+        rect(s, ML, 6.30, CW, 0.62, fill=CRIMSON)
+        tf = textbox(s, ML + 0.30, 6.30, CW - 0.6, 0.62,
+                     anchor=MSO_ANCHOR.MIDDLE)
+        rich(tf, [("Presented by   ", {"size": 8.0, "color": ON_CRIMSON_LT,
+                                       "spacing": 1.3, "caps": True}),
+                  (self.PRESENTER, {"size": 13, "color": WHITE,
+                                    "family": "serif"}),
+                  ("      Register No.   ", {"size": 8.0,
+                                             "color": ON_CRIMSON_LT,
+                                             "spacing": 1.3, "caps": True}),
+                  (self.REGISTER, {"size": 13, "color": WHITE,
+                                   "family": "serif"})],
              first=True)
         return s
 
 
 # --------------------------------------------------------------------------
-# Notes support
-# --------------------------------------------------------------------------
 def notes(slide, text):
-    tf = slide.notes_slide.notes_text_frame
-    tf.text = text
+    slide.notes_slide.notes_text_frame.text = text
     return slide
